@@ -303,6 +303,7 @@ const html = tpl
   .replace(/__NMOVIE__/g, String(movies.list.length))
   .replace(/__NSESSION__/g, rows.length.toLocaleString('en-US'));
 
+await mkdir(`${root}out`, { recursive: true }); // 乾淨 checkout 下 out/ 不存在（已 gitignore）
 await writeFile(`${root}out/index.html`, html);
 console.log(
   `\nout/index.html: ${rows.length} 場次 / ${cinemas.list.length} 影城 / ${movies.list.length} 部片` +

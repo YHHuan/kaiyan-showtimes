@@ -315,6 +315,7 @@
       <button class="toggle" id="tSoon" aria-pressed="false"><span class="box"></span>只看還來得及</button>
       <button class="toggle" id="tEnd" aria-pressed="false"><span class="box"></span>顯示散場時間</button>
       <input class="search" id="q" type="search" placeholder="搜尋片名或戲院…">
+      <button class="toggle" id="share" title="複製目前查詢的連結">分享這個查詢</button>
     </div>
   </div>
 
@@ -589,7 +590,42 @@ var DATA = __DATA__;
     return card;
   }
 
+  // 把目前的篩選條件寫進網址，讓「這部片的場次」可以直接傳給別人。
+  // 只寫非預設值，網址才不會又長又醜。
+  function syncUrl() {
+    var p = new URLSearchParams();
+    if (state.date !== D[0]) p.set("d", state.date);
+    if (state.view !== "movie") p.set("v", state.view);
+    if (state.area !== "全部") p.set("a", state.area);
+    if (state.slot !== "all") p.set("s", state.slot);
+    if (state.q) p.set("q", state.q);
+    if (state.onlyEvent) p.set("e", "1");
+    if (state.onlySoon) p.set("n", "1");
+    if (state.showEnd) p.set("t", "1");
+    var qs = p.toString();
+    try {
+      history.replaceState(null, "", qs ? location.pathname + "?" + qs : location.pathname);
+    } catch (err) {}
+  }
+
+  function readUrl() {
+    var p;
+    try { p = new URLSearchParams(location.search); } catch (err) { return; }
+    var d = p.get("d");
+    if (d && D.indexOf(d) >= 0) state.date = d;          // 網址上的日期可能已經過期，過期就忽略
+    if (p.get("v") === "cinema") state.view = "cinema";
+    var a = p.get("a");
+    if (a && (a === "全部" || areas.indexOf(a) >= 0)) state.area = a;
+    var s = p.get("s");
+    if (s && ["all", "morning", "afternoon", "evening", "late"].indexOf(s) >= 0) state.slot = s;
+    if (p.get("q")) state.q = p.get("q").trim().toLowerCase();
+    state.onlyEvent = p.get("e") === "1";
+    state.onlySoon = p.get("n") === "1";
+    if (p.get("t") === "1") state.showEnd = true;
+  }
+
   function render() {
+    syncUrl();
     renderDates();
     renderAreaOptions();
     document.getElementById("vMovie").setAttribute("aria-pressed", String(state.view === "movie"));
@@ -672,6 +708,24 @@ var DATA = __DATA__;
   document.getElementById("tEvent").onclick = function () { state.onlyEvent = !state.onlyEvent; state.limit = 40; render(); };
   document.getElementById("tSoon").onclick = function () { state.onlySoon = !state.onlySoon; state.limit = 40; render(); };
   document.getElementById("tEnd").onclick = function () { state.showEnd = !state.showEnd; store.set("showEnd", state.showEnd ? "1" : "0"); render(); };
+  document.getElementById("share").onclick = function () {
+    var btn = this;
+    var url = location.href;
+    var done = function (msg) {
+      var old = btn.textContent;
+      btn.textContent = msg;
+      setTimeout(function () { btn.textContent = old; }, 1600);
+    };
+    if (navigator.share) {
+      navigator.share({ title: "開演 — 電影場次", url: url }).catch(function () {});
+      return;
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(function () { done("已複製連結"); }, function () { done("複製失敗"); });
+    } else {
+      done("請直接複製網址列");
+    }
+  };
   document.getElementById("area").onchange = function (e) { state.area = e.target.value; store.set("area", state.area); state.limit = 40; render(); };
   document.getElementById("slot").onchange = function (e) { state.slot = e.target.value; state.limit = 40; render(); };
   document.getElementById("q").addEventListener("input", function (e) {
@@ -680,6 +734,9 @@ var DATA = __DATA__;
     render();
   });
 
+  readUrl();
+  document.getElementById("slot").value = state.slot;
+  document.getElementById("q").value = state.q;
   render();
 })();
 </script>
