@@ -313,6 +313,7 @@
       </select>
       <button class="toggle" id="tEvent" aria-pressed="false"><span class="box"></span>只看策展・活動場</button>
       <button class="toggle" id="tSoon" aria-pressed="false"><span class="box"></span>只看還來得及</button>
+      <button class="toggle" id="tEnd" aria-pressed="false"><span class="box"></span>顯示散場時間</button>
       <input class="search" id="q" type="search" placeholder="搜尋片名或戲院…">
     </div>
   </div>
@@ -322,7 +323,7 @@
 
   <footer>
     <p>資料來源：<b>國賓、光點華山/府中15、開眼(藝文館)、喜樂時代、in89、樂聲、美麗新、秀泰、新光</b> 各家官方公開場次頁／API。點場次可跳轉至該影城訂票入口。</p>
-    <p>此頁為技術驗證 demo，場次為 <b>2026/8/21 14:21:54</b> 抓取的靜態快照，非即時；正式版將定時自動更新。威秀影城因全站機器人防護尚未納入。</p>
+    <p>此頁為技術驗證 demo，場次為 <b>2026/8/21 17:47:34</b> 抓取的靜態快照，非即時；正式版將定時自動更新。威秀影城因全站機器人防護尚未納入。</p>
   </footer>
 </div>
 
@@ -337,6 +338,8 @@ var DATA = {"cinemas":[["國賓大戲院","台北市"],["台北長春國賓影�
   var C = DATA.cinemas, M = DATA.movies, H = DATA.halls, T = DATA.tags, U = DATA.urls, D = DATA.dates;
   var META = DATA.meta, SPRITE = DATA.sprite;
   var CELL_W = 62, CELL_H = 93;
+  // 正片前的廣告與預告，各家約 10-15 分鐘；散場時間是估算，不是官方數字
+  var ADS = 12;
 
   // 解開 build 端壓好的場次字串：組間 ';'、欄位 ','、同組多個時間 '.'，數字都是 36 進位。
   // 展開成一維陣列 [戲院, 電影, 日期, 連結, 廳, 標籤, 分鐘數]，後面所有篩選都吃這個。
@@ -379,6 +382,7 @@ var DATA = {"cinemas":[["國賓大戲院","台北市"],["台北長春國賓影�
     slot: "all",
     onlyEvent: false,
     onlySoon: false,
+    showEnd: store.get("showEnd", "0") === "1",
     q: "",
     limit: 40
   };
@@ -472,13 +476,19 @@ var DATA = {"cinemas":[["國賓大戲院","台北市"],["台北長春國賓影�
     a.href = bookUrl(r);
     a.target = "_blank";
     a.rel = "noopener";
-    a.appendChild(document.createTextNode(hhmm(r[5])));
+    var md = META[r[1]];
+    var endM = md && md.d ? (r[5] + md.d + ADS) % 1440 : null;
+    a.appendChild(document.createTextNode(
+      state.showEnd && endM != null ? hhmm(r[5]) + "–" + hhmm(endM) : hhmm(r[5])
+    ));
     var lab = T[r[4]] || H[r[3]];
     if (lab) a.appendChild(el("span", "lab", lab));
     if (isEvent(r)) a.className = "t ev";
     if (state.date === NOW.date && r[5] < NOW.mins) a.className += " past";
     var hall = H[r[3]];
-    a.title = C[r[0]][0] + "　" + M[r[1]][0] + "　" + state.date + " " + hhmm(r[5]) + (hall ? "　" + hall : "") + (T[r[4]] ? "　" + T[r[4]] : "");
+    a.title = C[r[0]][0] + "　" + M[r[1]][0] + "　" + state.date + " " + hhmm(r[5]) +
+      (endM != null ? "　散場約 " + hhmm(endM) : "") +
+      (hall ? "　" + hall : "") + (T[r[4]] ? "　" + T[r[4]] : "");
     return a;
   }
 
@@ -569,6 +579,7 @@ var DATA = {"cinemas":[["國賓大戲院","台北市"],["台北長春國賓影�
     document.getElementById("vCinema").setAttribute("aria-pressed", String(state.view === "cinema"));
     document.getElementById("tEvent").setAttribute("aria-pressed", String(state.onlyEvent));
     document.getElementById("tSoon").setAttribute("aria-pressed", String(state.onlySoon));
+    document.getElementById("tEnd").setAttribute("aria-pressed", String(state.showEnd));
 
     var rows = filtered();
     var list = document.getElementById("list");
@@ -643,6 +654,7 @@ var DATA = {"cinemas":[["國賓大戲院","台北市"],["台北長春國賓影�
   document.getElementById("vCinema").onclick = function () { state.view = "cinema"; state.limit = 40; store.set("view", "cinema"); render(); };
   document.getElementById("tEvent").onclick = function () { state.onlyEvent = !state.onlyEvent; state.limit = 40; render(); };
   document.getElementById("tSoon").onclick = function () { state.onlySoon = !state.onlySoon; state.limit = 40; render(); };
+  document.getElementById("tEnd").onclick = function () { state.showEnd = !state.showEnd; store.set("showEnd", state.showEnd ? "1" : "0"); render(); };
   document.getElementById("area").onchange = function (e) { state.area = e.target.value; store.set("area", state.area); state.limit = 40; render(); };
   document.getElementById("slot").onchange = function (e) { state.slot = e.target.value; state.limit = 40; render(); };
   document.getElementById("q").addEventListener("input", function (e) {
