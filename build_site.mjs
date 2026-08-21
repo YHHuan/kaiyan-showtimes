@@ -289,8 +289,17 @@ const generated = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', 
 const lagging = Object.entries(freshness)
   .filter(([, h]) => h > 26)
   .map(([s, h]) => `${SOURCE_NAMES[s] || s}（${h.toFixed(0)} 小時前）`);
+
+// 整個沒抓到的來源也要講。先前只報「有資料但過舊」，
+// 結果新光與 in89 整個消失時網站一聲不吭，使用者看到的是「這幾家今天沒場次」。
+const present = new Set(merged.map((r) => r.source));
+const absent = Object.keys(SOURCE_NAMES)
+  .filter((s) => !present.has(s))
+  .map((s) => SOURCE_NAMES[s]);
+
 const notice =
-  (lagging.length ? `本輪未更新：${lagging.join('、')}。` : '') +
+  (absent.length ? `本輪未取得：${absent.join('、')}，這幾家的場次暫時查不到。` : '') +
+  (lagging.length ? `沿用前一輪資料：${lagging.join('、')}。` : '') +
   (staleSources.length ? `已停用過期來源：${staleSources.join('、')}。` : '');
 
 const tpl = await readFile(`${root}site_template.html`, 'utf8');

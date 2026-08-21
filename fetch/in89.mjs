@@ -1,5 +1,7 @@
 // in89 豪華數位影城：頁面本身是 Vue 動態渲染（curl 只拿到空殼），用無頭瀏覽器讀渲染後的 DOM。
-// 場次掛在 a.selectTime 的 data-field（"YYYY-MM-DD HH:MM:SS"），廳別在同區塊的 .time-array。
+// 場次掛在 a[data-field]（"YYYY-MM-DD HH:MM:SS"），廳別在同區塊的 .time-array。
+// 注意不能只認 a.selectTime：訂票截止後站方會拿掉那個 class（連結變灰），
+// 但場次本身還在。只認 selectTime 會漏掉當天較早的場次，深夜更是整場空。
 // 西門館（TheaterId=3）已於 2026-05-31 停業，只剩桃園站前(1)、高雄駁二(2)。
 import { withPage, attempt } from '../lib/browser.mjs';
 import { saveRecords, normTitle } from '../lib/common.mjs';
@@ -13,13 +15,15 @@ const DAYS = 7;
 const records = await withPage(async (page) => {
   const out = [];
   for (const th of THEATERS) {
-    // 原本吞掉導覽失敗會靜靜產出 0 筆——那正是最難察覺的壞法，改成重試後才放棄
+    // 不要等 networkidle——這站有分析與廣告請求，CI 上永遠靜不下來（實測兩次都 60 秒逾時）。
+    // 改成等 DOM 可用後，直接等真正要解析的節點出現，這才是「載好了」的正確判準。
     const loaded = await attempt(`in89 ${th.id}`, async () => {
-      await page.goto(`https://www.in89cinemax.com/film_list.aspx?TheaterId=${th.id}`, { waitUntil: 'networkidle' });
+      await page.goto(`https://www.in89cinemax.com/film_list.aspx?TheaterId=${th.id}`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('div.list a[data-field]', { timeout: 45000 });
       return true;
     });
     if (!loaded) continue;
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(1200);
 
     const cinema = (await page.evaluate(() => {
       const el = [...document.querySelectorAll('*')].find((e) => e.children.length === 0 && /in89/i.test(e.textContent || '') && (e.textContent || '').length < 30);
@@ -39,7 +43,7 @@ const records = await withPage(async (page) => {
           const format = ps.find((t) => /2D|3D|數位|IMAX/.test(t)) || null;
           const rating = (ps.find((t) => /^分\s*級/.test(t)) || '').replace(/^分\s*級:\s*/, '') || null;
           for (const info of block.querySelectorAll('.stage_info')) {
-            const a = info.querySelector('a.selectTime');
+            const a = info.querySelector('a[data-field]');
             if (!a) continue;
             const field = a.getAttribute('data-field');
             if (!field) continue;

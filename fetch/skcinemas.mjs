@@ -1,7 +1,7 @@
 // 新光影城：場次 API 需要 timestamp/DID/token 簽章 header（token 由前端 JS 產生），
 // 純 curl 會被回 9002「資料驗證異常」。用無頭瀏覽器載入官方場次頁、讀它自己發出的回應。
 // 影城代碼由實測點擊各頁籤得到（?c=xxxx）。
-import { withPage, catchJson, attempt } from '../lib/browser.mjs';
+import { withPage, attempt } from '../lib/browser.mjs';
 import { saveRecords, normTitle } from '../lib/common.mjs';
 
 const CINEMAS = [
@@ -15,11 +15,25 @@ const CINEMAS = [
 const records = await withPage(async (page) => {
   const out = [];
   for (const c of CINEMAS) {
-    // 單館連線失敗要重試，而且不能讓整支抓取器炸掉——否則健康檢查會以為解析器壞了
+    // 用事件監聽收 API 回應，不要用 waitForResponse 跟 goto 併跑：
+    // goto 先拋錯時那個 promise 會變成沒人接的 rejection，直接讓整支程式掛掉（CI 上實際發生過）。
     const res = await attempt(c.name, async () => {
-      const pending = catchJson(page, 'GetSessionByCinemasIDForApp');
-      await page.goto(`https://www.skcinemas.com/sessions?c=${c.id}`, { waitUntil: 'domcontentloaded' });
-      return await pending;
+      let captured = null;
+      const onResponse = (r) => {
+        if (!r.url().includes('GetSessionByCinemasIDForApp') || r.status() !== 200) return;
+        r.json().then((j) => { captured = j; }, () => {});
+      };
+      page.on('response', onResponse);
+      try {
+        await page.goto(`https://www.skcinemas.com/sessions?c=${c.id}`, { waitUntil: 'domcontentloaded' });
+        for (let waited = 0; waited < 45000 && !captured; waited += 500) {
+          await page.waitForTimeout(500);
+        }
+      } finally {
+        page.off('response', onResponse);
+      }
+      if (!captured) throw new Error('等不到場次 API 回應');
+      return captured;
     });
     const data = res?.data;
     if (!data?.Session?.length) {
