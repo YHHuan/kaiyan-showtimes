@@ -4,8 +4,11 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-HTTP_FETCHERS=(showtimes ambassador centuryasia miranew lux arthouse atmovies)
+# atmovies 必須排在 skcinemas 之後：它會看 _status.json 決定要不要啟用新光的備援，
+# 跑在前面就只看得到上一輪的狀態，這一輪新光掛掉也不會補。
+HTTP_FETCHERS=(showtimes ambassador centuryasia miranew lux arthouse)
 BROWSER_FETCHERS=(skcinemas in89)   # 需要 playwright，較慢，序列跑避免同時開太多瀏覽器
+LAST_FETCHERS=(atmovies)
 
 failed=()
 
@@ -21,6 +24,7 @@ run() {
 # 純 HTTP 的可以平行，但各家站台都不大，序列跑比較禮貌也好除錯
 for f in "${HTTP_FETCHERS[@]}"; do run "$f"; done
 for f in "${BROWSER_FETCHERS[@]}"; do run "$f"; done
+for f in "${LAST_FETCHERS[@]}"; do run "$f"; done
 
 run movie_meta
 

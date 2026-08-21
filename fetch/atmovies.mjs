@@ -118,6 +118,9 @@ async function shouldUseSkcinemasBackup() {
   }
   const sk = status.skcinemas;
   if (!sk?.fetchedAt) return true;
+  // 光看時間戳不夠：抓取失敗時仍會寫入一筆 count 為 0、時間卻很新的狀態，
+  // 只檢查新鮮度會誤以為官方資料好好的，備援因此不啟動（CI 上實際發生過）。
+  if (!(sk.count > 300)) return true;
   const ageHours = (Date.now() - new Date(sk.fetchedAt).getTime()) / 3600000;
   return !(ageHours <= 26);
 }
@@ -125,7 +128,7 @@ async function shouldUseSkcinemasBackup() {
 const CINEMAS = { ...ARTHOUSE, ...VIESHOW };
 if (await shouldUseSkcinemasBackup()) {
   Object.assign(CINEMAS, SKCINEMAS_BACKUP);
-  console.log('  [新光] 官方來源缺席或已過期（>26 小時），啟用開眼備援');
+  console.log('  [新光] 官方來源缺席、過期或抓取失敗，啟用開眼備援');
 } else {
   console.log('  [新光] 官方來源新鮮，略過開眼備援，避免重複');
 }
