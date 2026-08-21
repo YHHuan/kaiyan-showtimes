@@ -13,6 +13,11 @@ concurrency:
   group: update-showtimes
   cancel-in-progress: false
 
+# runner 預設是 UTC。所有「今天是哪一天」的判斷都必須以台北為準，
+# 否則台北清晨那輪（22:00 UTC）會去抓前一天的場次，建置時再被整批當成過期丟掉。
+env:
+  TZ: Asia/Taipei
+
 permissions:
   contents: read
   pages: write
