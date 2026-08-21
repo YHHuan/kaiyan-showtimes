@@ -293,12 +293,21 @@ const lagging = Object.entries(freshness)
 // 整個沒抓到的來源也要講。先前只報「有資料但過舊」，
 // 結果新光與 in89 整個消失時網站一聲不吭，使用者看到的是「這幾家今天沒場次」。
 const present = new Set(merged.map((r) => r.source));
-const absent = Object.keys(SOURCE_NAMES)
-  .filter((s) => !present.has(s))
-  .map((s) => SOURCE_NAMES[s]);
+
+// 有些來源抓不到時會由開眼補上（見 fetch/atmovies.mjs）。這種情況要說「改用備援、只有今天」，
+// 不能說「查不到」——新光的場次明明在站上，講成查不到反而是誤導。
+const FALLBACK = { skcinemas: /新光/ };
+const cinemaNames = new Set(merged.map((r) => r.cinema));
+const coveredByBackup = (src) =>
+  FALLBACK[src] && [...cinemaNames].some((n) => FALLBACK[src].test(n));
+
+const missing = Object.keys(SOURCE_NAMES).filter((s) => !present.has(s));
+const absent = missing.filter((s) => !coveredByBackup(s)).map((s) => SOURCE_NAMES[s]);
+const viaBackup = missing.filter(coveredByBackup).map((s) => SOURCE_NAMES[s]);
 
 const notice =
   (absent.length ? `本輪未取得：${absent.join('、')}，這幾家的場次暫時查不到。` : '') +
+  (viaBackup.length ? `${viaBackup.join('、')}官方來源今日取得失敗，改用開眼的資料，因此只有當天場次。` : '') +
   (lagging.length ? `沿用前一輪資料：${lagging.join('、')}。` : '') +
   (staleSources.length ? `已停用過期來源：${staleSources.join('、')}。` : '');
 
