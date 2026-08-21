@@ -1,7 +1,7 @@
 // 新光影城：場次 API 需要 timestamp/DID/token 簽章 header（token 由前端 JS 產生），
 // 純 curl 會被回 9002「資料驗證異常」。用無頭瀏覽器載入官方場次頁、讀它自己發出的回應。
 // 影城代碼由實測點擊各頁籤得到（?c=xxxx）。
-import { withPage, catchJson } from '../lib/browser.mjs';
+import { withPage, catchJson, attempt } from '../lib/browser.mjs';
 import { saveRecords, normTitle } from '../lib/common.mjs';
 
 const CINEMAS = [
@@ -15,9 +15,12 @@ const CINEMAS = [
 const records = await withPage(async (page) => {
   const out = [];
   for (const c of CINEMAS) {
-    const pending = catchJson(page, 'GetSessionByCinemasIDForApp').catch(() => null);
-    await page.goto(`https://www.skcinemas.com/sessions?c=${c.id}`, { waitUntil: 'domcontentloaded' });
-    const res = await pending;
+    // 單館連線失敗要重試，而且不能讓整支抓取器炸掉——否則健康檢查會以為解析器壞了
+    const res = await attempt(c.name, async () => {
+      const pending = catchJson(page, 'GetSessionByCinemasIDForApp');
+      await page.goto(`https://www.skcinemas.com/sessions?c=${c.id}`, { waitUntil: 'domcontentloaded' });
+      return await pending;
+    });
     const data = res?.data;
     if (!data?.Session?.length) {
       console.log(`  ${c.name}: 無資料（可能站方暫時異常）`);

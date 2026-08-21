@@ -25,12 +25,17 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { politeFetch, normTitle, todayISO } from '../lib/common.mjs';
 
+import { tmpdir } from 'node:os';
+
 const execFileP = promisify(execFile);
+await mkdir(`${tmpdir()}/kaiyan-movie-meta`, { recursive: true });
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-const FFMPEG = `${process.env.HOME}/.local/bin/ffmpeg`;
+// 本機把 ffmpeg 裝在 ~/.local/bin，CI 上是系統的 /usr/bin——用 PATH 找，找不到才退回本機路徑
+const FFMPEG = process.env.FFMPEG || 'ffmpeg';
 const ROOT = new URL('..', import.meta.url);
 const POSTER_DIR = new URL('assets/posters/', ROOT);
-const SCRATCH_DIR = '/tmp/claude-1000/-home-salmonyhh-repos-kinglite/77598456-46b7-48ad-b460-4535f4266353/scratchpad';
+// 開發時這裡曾寫死某台機器的暫存路徑，CI 上不存在會整支掛掉。改用系統暫存目錄。
+const SCRATCH_DIR = `${tmpdir()}/kaiyan-movie-meta`;
 const REQUEST_DELAY_MS = 250;
 const SYNOPSIS_MAX = 120;
 

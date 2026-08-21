@@ -1,7 +1,7 @@
 // in89 豪華數位影城：頁面本身是 Vue 動態渲染（curl 只拿到空殼），用無頭瀏覽器讀渲染後的 DOM。
 // 場次掛在 a.selectTime 的 data-field（"YYYY-MM-DD HH:MM:SS"），廳別在同區塊的 .time-array。
 // 西門館（TheaterId=3）已於 2026-05-31 停業，只剩桃園站前(1)、高雄駁二(2)。
-import { withPage } from '../lib/browser.mjs';
+import { withPage, attempt } from '../lib/browser.mjs';
 import { saveRecords, normTitle } from '../lib/common.mjs';
 
 const THEATERS = [
@@ -13,7 +13,12 @@ const DAYS = 7;
 const records = await withPage(async (page) => {
   const out = [];
   for (const th of THEATERS) {
-    await page.goto(`https://www.in89cinemax.com/film_list.aspx?TheaterId=${th.id}`, { waitUntil: 'networkidle', timeout: 45000 }).catch(() => {});
+    // 原本吞掉導覽失敗會靜靜產出 0 筆——那正是最難察覺的壞法，改成重試後才放棄
+    const loaded = await attempt(`in89 ${th.id}`, async () => {
+      await page.goto(`https://www.in89cinemax.com/film_list.aspx?TheaterId=${th.id}`, { waitUntil: 'networkidle' });
+      return true;
+    });
+    if (!loaded) continue;
     await page.waitForTimeout(2500);
 
     const cinema = (await page.evaluate(() => {
