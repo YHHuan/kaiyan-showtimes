@@ -1,0 +1,13 @@
+node_modules/
+out/
+_site/
+.cache/
+
+# 每輪重抓的產物，不進版本控制（CI 用 actions/cache 保存）
+data/*.json
+!data/movie_meta.json
+!data/_history.json
+assets/posters/
+
+# 由 workflow 產生並直接發佈到 Pages，不留在 repo
+/index.html

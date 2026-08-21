@@ -1,0 +1,685 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>開演</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root {
+    --bg: #F5F7F9;
+    --surface: #FFFFFF;
+    --sunk: #EFF2F5;
+    --ink: #151B23;
+    --muted: #69737F;
+    --faint: #98A2AD;
+    --line: #E1E6EB;
+    --accent: #D33C22;
+    --accent-ink: #FFFFFF;
+    --event: #0D7A6F;
+    --event-bg: #E4F2F0;
+    --shadow: 0 1px 2px rgba(21, 27, 35, .05), 0 6px 16px -10px rgba(21, 27, 35, .18);
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg: #0F1418;
+      --surface: #171E24;
+      --sunk: #1E262D;
+      --ink: #E7ECF1;
+      --muted: #8B97A3;
+      --faint: #6B7681;
+      --line: #28313A;
+      --accent: #FF6A4D;
+      --accent-ink: #14191D;
+      --event: #43C3B2;
+      --event-bg: #12302E;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 20px -12px rgba(0, 0, 0, .7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0F1418;
+    --surface: #171E24;
+    --sunk: #1E262D;
+    --ink: #E7ECF1;
+    --muted: #8B97A3;
+    --faint: #6B7681;
+    --line: #28313A;
+    --accent: #FF6A4D;
+    --accent-ink: #14191D;
+    --event: #43C3B2;
+    --event-bg: #12302E;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 20px -12px rgba(0, 0, 0, .7);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 18px 72px; }
+
+  /* ── 頁首 ───────────────────────────────── */
+  header { padding: 26px 0 8px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  h1 {
+    font-family: "Noto Serif TC", serif;
+    font-weight: 900;
+    font-size: 1.85rem;
+    letter-spacing: .1em;
+    margin: 0;
+  }
+  h1 .dot { color: var(--accent); }
+  .sub { color: var(--muted); font-size: .84rem; padding-bottom: .2em; }
+  .stats { margin-left: auto; display: flex; gap: 18px; padding-bottom: .25em; }
+  .stat { text-align: right; }
+  .stat b {
+    display: block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  .stat span { font-size: .68rem; color: var(--faint); letter-spacing: .06em; }
+
+  /* ── 控制列 ─────────────────────────────── */
+  .controls {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    margin: 0 -18px;
+    padding: 10px 18px 9px;
+  }
+  .dates { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+  .day {
+    flex: 0 0 auto;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 5px 11px 6px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    line-height: 1.25;
+    min-width: 58px;
+  }
+  .day b {
+    display: block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: .92rem;
+    font-weight: 600;
+  }
+  .day span { font-size: .66rem; color: var(--muted); }
+  .day[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .day[aria-pressed="true"] span { color: var(--accent-ink); opacity: .85; }
+
+  .row2 { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .seg button {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: .84rem;
+    padding: 5px 13px;
+    cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--sunk); color: var(--ink); font-weight: 700; }
+  select, .search {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: .84rem;
+    font-family: inherit;
+  }
+  .search { flex: 1 1 150px; min-width: 130px; }
+  .search::placeholder { color: var(--faint); }
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 5px 11px;
+    font-size: .84rem;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .toggle[aria-pressed="true"] { border-color: var(--event); color: var(--event); background: var(--event-bg); font-weight: 700; }
+  .toggle .box { width: 9px; height: 9px; border-radius: 2px; border: 1.5px solid currentColor; }
+  .toggle[aria-pressed="true"] .box { background: currentColor; }
+  button:focus-visible, select:focus-visible, .search:focus-visible, a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .summary { color: var(--muted); font-size: .8rem; margin: 14px 2px 12px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .summary b { color: var(--ink); font-weight: 700; }
+  .summary .clear { color: var(--accent); cursor: pointer; background: none; border: 0; font-family: inherit; font-size: .8rem; padding: 0; }
+
+  /* ── 卡片 ───────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 15px 17px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+  }
+  .head { display: flex; gap: 13px; align-items: flex-start; }
+  /* 海報全部拼在一張 sprite 圖裡，用定位裁出單一畫格 */
+  .poster {
+    flex: 0 0 62px;
+    width: 62px;
+    height: 93px;
+    border-radius: 5px;
+    background-color: var(--sunk);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    position: relative;
+  }
+  .poster img { position: absolute; max-width: none; image-rendering: auto; }
+  .headtext { flex: 1; min-width: 0; }
+  h2 {
+    font-family: "Noto Serif TC", serif;
+    font-weight: 700;
+    font-size: 1.14rem;
+    margin: 0 0 1px;
+    text-wrap: balance;
+    line-height: 1.35;
+  }
+  .en { color: var(--faint); font-size: .74rem; letter-spacing: .01em; margin-bottom: 4px; }
+  .meta { color: var(--muted); font-size: .76rem; display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+  .pill {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 5px;
+    font-size: .7rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .pill.ev { border-color: var(--event); color: var(--event); background: var(--event-bg); font-weight: 700; }
+  .syn {
+    color: var(--muted);
+    font-size: .8rem;
+    margin-top: 6px;
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .syn.open { -webkit-line-clamp: unset; }
+
+  .venues { margin-top: 11px; }
+  .venue { display: flex; gap: 11px; padding: 9px 0; border-top: 1px dashed var(--line); flex-wrap: wrap; align-items: baseline; }
+  .vname { flex: 0 0 176px; font-size: .87rem; font-weight: 500; line-height: 1.4; }
+  .vname .area { color: var(--faint); font-size: .68rem; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; margin-right: 5px; white-space: nowrap; }
+  .times { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; min-width: 0; }
+  .t {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: .84rem;
+    font-weight: 500;
+    border: 1px solid var(--line);
+    background: var(--sunk);
+    color: var(--ink);
+    border-radius: 6px;
+    padding: 3px 8px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .t:hover { border-color: var(--accent); color: var(--accent); }
+  .t .lab { font-family: "Noto Sans TC", sans-serif; font-size: .66rem; color: var(--faint); font-weight: 400; }
+  .t.ev { border-color: var(--event); background: var(--event-bg); }
+  .t.ev .lab { color: var(--event); font-weight: 700; }
+  .t.past { opacity: .38; }
+
+  .empty { text-align: center; color: var(--muted); padding: 56px 16px; }
+  .empty b { display: block; font-size: 1.02rem; color: var(--ink); margin-bottom: 6px; }
+  .more {
+    display: block;
+    width: 100%;
+    margin: 4px 0 20px;
+    padding: 10px;
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: .85rem;
+    cursor: pointer;
+  }
+  .more:hover { border-color: var(--accent); color: var(--accent); }
+
+  footer { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 14px; color: var(--faint); font-size: .75rem; }
+  footer p { margin: 4px 0; }
+  footer b { color: var(--muted); }
+
+  @media (max-width: 620px) {
+    h1 { font-size: 1.5rem; }
+    .stats { display: none; }
+    .vname { flex-basis: 100%; }
+    .poster { flex-basis: 52px; width: 52px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .card { transition: border-color .15s ease; }
+    .t { transition: border-color .12s ease, color .12s ease; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>開演<span class="dot">.</span></h1>
+      <span class="sub">全台電影場次，一頁查完</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>__NSESSION__</b><span>場次</span></div>
+      <div class="stat"><b>__NCINEMA__</b><span>影城</span></div>
+      <div class="stat"><b>__NMOVIE__</b><span>電影</span></div>
+    </div>
+  </header>
+
+  <div class="controls">
+    <div class="dates" id="dates" role="group" aria-label="日期"></div>
+    <div class="row2">
+      <div class="seg" role="group" aria-label="檢視方式">
+        <button id="vMovie" aria-pressed="true">按電影</button>
+        <button id="vCinema" aria-pressed="false">按戲院</button>
+      </div>
+      <select id="area" aria-label="地區"></select>
+      <select id="slot" aria-label="時段">
+        <option value="all">全時段</option>
+        <option value="morning">早場 ‹12:00</option>
+        <option value="afternoon">下午 12–17</option>
+        <option value="evening">晚場 17–22</option>
+        <option value="late">午夜 22:00›</option>
+      </select>
+      <button class="toggle" id="tEvent" aria-pressed="false"><span class="box"></span>只看策展・活動場</button>
+      <button class="toggle" id="tSoon" aria-pressed="false"><span class="box"></span>只看還來得及</button>
+      <button class="toggle" id="tEnd" aria-pressed="false"><span class="box"></span>顯示散場時間</button>
+      <input class="search" id="q" type="search" placeholder="搜尋片名或戲院…">
+    </div>
+  </div>
+
+  <div class="summary" id="summary"></div>
+  <div id="list"></div>
+
+  <footer>
+    <p>資料來源：<b>__SOURCES__</b> 各家官方公開場次頁／API。點場次可跳轉至該影城訂票入口。</p>
+    <p>場次更新於 <b>__GENERATED__</b>，每日自動重抓。<span id="notice"></span>
+      實際場次與票種以各影城官方公告為準；威秀影城因全站機器人防護尚未納入。</p>
+    <p>散場時間為估算（片長＋約 12 分鐘廣告），僅供參考。</p>
+  </footer>
+</div>
+
+<script>
+var DATA = __DATA__;
+(function () {
+  "use strict";
+
+  var DOW = ["日", "一", "二", "三", "四", "五", "六"];
+  // 哪些標籤算「策展・活動場」。實際標籤只有九十幾種，逐一掃過歸納出來的；
+  // 語言與影廳規格（數位 英語 / ATMOS / B.O.X.）刻意不列入，那是一般場次。
+  var EVENT_RE = new RegExp([
+    "影展", "映畫祭", "座談", "映後", "映前", "導聆", "講座", "QA", "Q&A",
+    "特別場", "海報場", "限定", "親子", "嬰兒車", "音樂會", "同樂會", "應援",
+    "放映會", "見面會", "影人", "導演", "修復", "特映", "首映", "試映", "包場",
+    "情人節", "報名制", "聽．視界", "口述影像", "LIVE VIEWING", "LIVE"
+  ].join("|"), "i");
+
+  var C = DATA.cinemas, M = DATA.movies, H = DATA.halls, T = DATA.tags, U = DATA.urls, D = DATA.dates;
+  var META = DATA.meta, SPRITE = DATA.sprite;
+
+  // 來源狀態：某家本輪沒抓到時，明講是沿用舊資料，不要讓使用者以為是即時的
+  var NOTICE = "__NOTICE__";
+  if (NOTICE) {
+    var nEl = document.getElementById("notice");
+    if (nEl) { nEl.textContent = NOTICE + " "; nEl.style.color = "var(--accent)"; }
+  }
+
+  var CELL_W = 62, CELL_H = 93;
+  // 正片前的廣告與預告，各家約 10-15 分鐘；散場時間是估算，不是官方數字
+  var ADS = 12;
+
+  // 解開 build 端壓好的場次字串：組間 ';'、欄位 ','、同組多個時間 '.'，數字都是 36 進位。
+  // 展開成一維陣列 [戲院, 電影, 日期, 連結, 廳, 標籤, 分鐘數]，後面所有篩選都吃這個。
+  var ROWS = (function () {
+    var out = [];
+    var packed = DATA.packed;
+    if (!packed) return out;
+    var groups = packed.split(";");
+    for (var i = 0; i < groups.length; i++) {
+      var f = groups[i].split(",");
+      var ci = parseInt(f[0], 36), mi = parseInt(f[1], 36), di = parseInt(f[2], 36);
+      var hi = parseInt(f[3], 36), ti = parseInt(f[4], 36);
+      var times = f[5].split(".");
+      for (var j = 0; j < times.length; j++) {
+        out.push([ci, mi, di, hi, ti, parseInt(times[j], 36)]);
+      }
+    }
+    return out;
+  })();
+
+  // 索引：0=戲院 1=電影 2=日期 3=廳 4=標籤 5=分鐘數
+  function isEvent(r) { var t = T[r[4]]; return !!t && EVENT_RE.test(t); }
+  function hhmm(m) { return p2(Math.floor(m / 60)) + ":" + p2(m % 60); }
+  // 訂票連結是每家戲院一個樣板；{d}=2026-08-21、{s}=2026%2F08%2F21（國賓那種帶查詢日期的）
+  function bookUrl(r) {
+    return (U[r[0]] || "")
+      .replace("{d}", state.date)
+      .replace("{s}", encodeURIComponent(state.date.replace(/-/g, "/")));
+  }
+
+  var store = {
+    get: function (k, d) { try { var v = localStorage.getItem("kaiyan." + k); return v === null ? d : v; } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem("kaiyan." + k, v); } catch (e) {} }
+  };
+
+  var state = {
+    date: D[0],
+    view: store.get("view", "movie"),
+    area: store.get("area", "全部"),
+    slot: "all",
+    onlyEvent: false,
+    onlySoon: false,
+    showEnd: store.get("showEnd", "0") === "1",
+    q: "",
+    limit: 40
+  };
+
+  var areas = Object.keys(C.reduce(function (a, c) { if (c[1]) a[c[1]] = 1; return a; }, {})).sort();
+  if (areas.indexOf(state.area) < 0) state.area = "全部";
+
+  // 台北時間的「現在」，用來判斷場次是否已開演
+  function taipeiNow() {
+    var s = new Date().toLocaleString("en-US", { timeZone: "Asia/Taipei", hour12: false });
+    var d = new Date(s);
+    return { date: d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()), mins: d.getHours() * 60 + d.getMinutes() };
+  }
+  function p2(n) { return n < 10 ? "0" + n : "" + n; }
+  function toMins(t) { return (+t.slice(0, 2)) * 60 + (+t.slice(3, 5)); }
+  var NOW = taipeiNow();
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function renderDates() {
+    var box = document.getElementById("dates");
+    box.textContent = "";
+    D.forEach(function (d) {
+      var b = el("button", "day");
+      var dt = new Date(d + "T00:00:00");
+      b.appendChild(el("b", null, d.slice(5).replace("-", "/")));
+      b.appendChild(el("span", null, d === NOW.date ? "今天" : DOW[dt.getDay()]));
+      b.setAttribute("aria-pressed", String(d === state.date));
+      b.onclick = function () { state.date = d; state.limit = 40; render(); };
+      box.appendChild(b);
+    });
+  }
+
+  function renderAreaOptions() {
+    var sel = document.getElementById("area");
+    if (sel.options.length) return;
+    ["全部"].concat(areas).forEach(function (a) {
+      var o = document.createElement("option");
+      o.value = a;
+      o.textContent = a === "全部" ? "全部地區" : a;
+      sel.appendChild(o);
+    });
+    sel.value = state.area;
+  }
+
+  function slotOk(m) {
+    switch (state.slot) {
+      case "morning": return m < 720;
+      case "afternoon": return m >= 720 && m < 1020;
+      case "evening": return m >= 1020 && m < 1320;
+      case "late": return m >= 1320;
+      default: return true;
+    }
+  }
+
+  function filtered() {
+    var di = D.indexOf(state.date);
+    var q = state.q;
+    var out = [];
+    for (var i = 0; i < ROWS.length; i++) {
+      var r = ROWS[i];
+      if (r[2] !== di) continue;
+      if (state.area !== "全部" && C[r[0]][1] !== state.area) continue;
+      if (!slotOk(r[5])) continue;
+      if (state.onlyEvent && !isEvent(r)) continue;
+      if (state.onlySoon && state.date === NOW.date && r[5] < NOW.mins) continue;
+      if (q && M[r[1]][0].toLowerCase().indexOf(q) < 0 && C[r[0]][0].toLowerCase().indexOf(q) < 0) continue;
+      out.push(r);
+    }
+    return out;
+  }
+
+  function group(rows, keyIdx) {
+    var m = new Map();
+    for (var i = 0; i < rows.length; i++) {
+      var k = rows[i][keyIdx];
+      var a = m.get(k);
+      if (!a) { a = []; m.set(k, a); }
+      a.push(rows[i]);
+    }
+    return m;
+  }
+
+  function timeChip(r) {
+    var a = el("a", "t");
+    a.href = bookUrl(r);
+    a.target = "_blank";
+    a.rel = "noopener";
+    var md = META[r[1]];
+    var endM = md && md.d ? (r[5] + md.d + ADS) % 1440 : null;
+    a.appendChild(document.createTextNode(
+      state.showEnd && endM != null ? hhmm(r[5]) + "–" + hhmm(endM) : hhmm(r[5])
+    ));
+    var lab = T[r[4]] || H[r[3]];
+    if (lab) a.appendChild(el("span", "lab", lab));
+    if (isEvent(r)) a.className = "t ev";
+    if (state.date === NOW.date && r[5] < NOW.mins) a.className += " past";
+    var hall = H[r[3]];
+    a.title = C[r[0]][0] + "　" + M[r[1]][0] + "　" + state.date + " " + hhmm(r[5]) +
+      (endM != null ? "　散場約 " + hhmm(endM) : "") +
+      (hall ? "　" + hall : "") + (T[r[4]] ? "　" + T[r[4]] : "");
+    return a;
+  }
+
+  function venueRow(label, area, rows) {
+    var v = el("div", "venue");
+    var n = el("div", "vname");
+    if (area) n.appendChild(el("span", "area", area));
+    n.appendChild(document.createTextNode(label));
+    v.appendChild(n);
+    var times = el("div", "times");
+    rows.sort(function (a, b) { return a[5] - b[5]; });
+    for (var i = 0; i < rows.length; i++) times.appendChild(timeChip(rows[i]));
+    v.appendChild(times);
+    return v;
+  }
+
+  function movieCard(mi, rows) {
+    var info = M[mi], meta = META[mi] || {};
+    var card = el("div", "card");
+    var head = el("div", "head");
+
+    if (meta.i != null && SPRITE) {
+      var box = el("div", "poster");
+      var im = document.createElement("img");
+      im.src = SPRITE.uri;
+      im.alt = "";
+      im.width = SPRITE.cols * CELL_W;
+      im.height = SPRITE.rows * CELL_H;
+      im.style.left = -(meta.i % SPRITE.cols) * CELL_W + "px";
+      im.style.top = -Math.floor(meta.i / SPRITE.cols) * CELL_H + "px";
+      box.appendChild(im);
+      head.appendChild(box);
+    }
+
+    var ht = el("div", "headtext");
+    ht.appendChild(el("h2", null, info[0]));
+    if (info[1]) ht.appendChild(el("div", "en", info[1]));
+
+    var meta1 = el("div", "meta");
+    if (info[2]) meta1.appendChild(el("span", "pill", info[2]));
+    if (meta.d) meta1.appendChild(el("span", "pill", meta.d + " 分"));
+    var nc = new Set(rows.map(function (r) { return r[0]; })).size;
+    meta1.appendChild(el("span", null, nc + " 家戲院・" + rows.length + " 場"));
+    if (rows.some(isEvent)) meta1.appendChild(el("span", "pill ev", "策展・活動場"));
+    ht.appendChild(meta1);
+
+    if (meta.s) {
+      var syn = el("div", "syn", meta.s);
+      syn.title = "點擊展開";
+      syn.onclick = function () { syn.classList.toggle("open"); };
+      ht.appendChild(syn);
+    }
+    head.appendChild(ht);
+    card.appendChild(head);
+
+    var vs = el("div", "venues");
+    Array.from(group(rows, 0).entries())
+      .sort(function (a, b) { return C[a[0]][0] < C[b[0]][0] ? -1 : 1; })
+      .forEach(function (pair) { vs.appendChild(venueRow(C[pair[0]][0], C[pair[0]][1], pair[1])); });
+    card.appendChild(vs);
+    return card;
+  }
+
+  function cinemaCard(ci, rows) {
+    var card = el("div", "card");
+    var ht = el("div", "headtext");
+    ht.appendChild(el("h2", null, C[ci][0]));
+    var meta1 = el("div", "meta");
+    var nm = new Set(rows.map(function (r) { return r[1]; })).size;
+    meta1.appendChild(el("span", "pill", C[ci][1] || "—"));
+    meta1.appendChild(el("span", null, nm + " 部電影・" + rows.length + " 個場次"));
+    if (rows.some(isEvent)) meta1.appendChild(el("span", "pill ev", "策展・活動場"));
+    ht.appendChild(meta1);
+    card.appendChild(ht);
+
+    var vs = el("div", "venues");
+    Array.from(group(rows, 1).entries())
+      .sort(function (a, b) { return b[1].length - a[1].length; })
+      .forEach(function (pair) { vs.appendChild(venueRow(M[pair[0]][0], null, pair[1])); });
+    card.appendChild(vs);
+    return card;
+  }
+
+  function render() {
+    renderDates();
+    renderAreaOptions();
+    document.getElementById("vMovie").setAttribute("aria-pressed", String(state.view === "movie"));
+    document.getElementById("vCinema").setAttribute("aria-pressed", String(state.view === "cinema"));
+    document.getElementById("tEvent").setAttribute("aria-pressed", String(state.onlyEvent));
+    document.getElementById("tSoon").setAttribute("aria-pressed", String(state.onlySoon));
+    document.getElementById("tEnd").setAttribute("aria-pressed", String(state.showEnd));
+
+    var rows = filtered();
+    var list = document.getElementById("list");
+    list.textContent = "";
+
+    var nMovies = new Set(rows.map(function (r) { return r[1]; })).size;
+    var nCinemas = new Set(rows.map(function (r) { return r[0]; })).size;
+    var sum = document.getElementById("summary");
+    sum.textContent = "";
+    sum.appendChild(el("span", null, state.date));
+    sum.appendChild(el("span", null, "·"));
+    var b = el("span", null, "");
+    b.appendChild(el("b", null, String(nMovies)));
+    b.appendChild(document.createTextNode(" 部電影　"));
+    b.appendChild(el("b", null, String(nCinemas)));
+    b.appendChild(document.createTextNode(" 家戲院　"));
+    b.appendChild(el("b", null, rows.length.toLocaleString("en-US")));
+    b.appendChild(document.createTextNode(" 個場次"));
+    sum.appendChild(b);
+    if (state.area !== "全部" || state.slot !== "all" || state.onlyEvent || state.onlySoon || state.q) {
+      var clr = el("button", "clear", "清除篩選");
+      clr.onclick = function () {
+        state.area = "全部"; state.slot = "all"; state.onlyEvent = false; state.onlySoon = false; state.q = "";
+        document.getElementById("area").value = "全部";
+        document.getElementById("slot").value = "all";
+        document.getElementById("q").value = "";
+        store.set("area", "全部");
+        state.limit = 40;
+        render();
+      };
+      sum.appendChild(clr);
+    }
+
+    if (!rows.length) {
+      var e = el("div", "empty");
+      e.appendChild(el("b", null, "這個條件查不到場次"));
+      e.appendChild(el("div", null, "換個日期、放寬地區或時段試試。"));
+      list.appendChild(e);
+      return;
+    }
+
+    var groups;
+    if (state.view === "movie") {
+      groups = Array.from(group(rows, 1).entries()).sort(function (a, b) {
+        var ae = a[1].some(isEvent), be = b[1].some(isEvent);
+        if (ae !== be && state.onlyEvent) return ae ? -1 : 1;
+        return b[1].length - a[1].length;
+      });
+    } else {
+      groups = Array.from(group(rows, 0).entries()).sort(function (a, b) {
+        var aa = C[a[0]][1] || "", ba = C[b[0]][1] || "";
+        if (aa !== ba) return aa < ba ? -1 : 1;
+        return C[a[0]][0] < C[b[0]][0] ? -1 : 1;
+      });
+    }
+
+    var shown = groups.slice(0, state.limit);
+    var frag = document.createDocumentFragment();
+    shown.forEach(function (pair) {
+      frag.appendChild(state.view === "movie" ? movieCard(pair[0], pair[1]) : cinemaCard(pair[0], pair[1]));
+    });
+    list.appendChild(frag);
+
+    if (groups.length > shown.length) {
+      var more = el("button", "more", "顯示其餘 " + (groups.length - shown.length) + " " + (state.view === "movie" ? "部電影" : "家戲院"));
+      more.onclick = function () { state.limit += 60; render(); };
+      list.appendChild(more);
+    }
+  }
+
+  document.getElementById("vMovie").onclick = function () { state.view = "movie"; state.limit = 40; store.set("view", "movie"); render(); };
+  document.getElementById("vCinema").onclick = function () { state.view = "cinema"; state.limit = 40; store.set("view", "cinema"); render(); };
+  document.getElementById("tEvent").onclick = function () { state.onlyEvent = !state.onlyEvent; state.limit = 40; render(); };
+  document.getElementById("tSoon").onclick = function () { state.onlySoon = !state.onlySoon; state.limit = 40; render(); };
+  document.getElementById("tEnd").onclick = function () { state.showEnd = !state.showEnd; store.set("showEnd", state.showEnd ? "1" : "0"); render(); };
+  document.getElementById("area").onchange = function (e) { state.area = e.target.value; store.set("area", state.area); state.limit = 40; render(); };
+  document.getElementById("slot").onchange = function (e) { state.slot = e.target.value; state.limit = 40; render(); };
+  document.getElementById("q").addEventListener("input", function (e) {
+    state.q = e.target.value.trim().toLowerCase();
+    state.limit = 40;
+    render();
+  });
+
+  render();
+})();
+</script>

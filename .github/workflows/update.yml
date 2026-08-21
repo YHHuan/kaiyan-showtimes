@@ -1,0 +1,92 @@
+name: 更新場次
+
+on:
+  schedule:
+    # 台北時間 06:00 與 18:00。各影城多半在前一天 20:00 前公布隔日場次，
+    # 早上抓到完整的今天，傍晚補當天的異動與新開放的預售。
+    - cron: '0 22 * * *'
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+# 同時只跑一份，避免兩輪互相蓋掉 data/
+concurrency:
+  group: update-showtimes
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 上一輪抓到的 data/*.json。某家這輪掛掉時就沿用它的舊檔，
+      # build_site 會依 _status.json 的時間戳決定還能不能用（超過 72 小時就整個剔除）。
+      - name: 取回上一輪的場次資料
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            data
+            assets
+          key: showtimes-data-${{ github.run_id }}
+          restore-keys: |
+            showtimes-data-
+
+      - name: 安裝相依套件
+        run: |
+          set -e
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y ffmpeg
+          fi
+          ffmpeg -version | head -1
+
+      - name: 抓取所有來源
+        run: bash run-all.sh
+        continue-on-error: true   # 個別來源失敗不該中止整條流程，交給健康檢查裁決
+
+      - name: 健康檢查
+        run: node check_health.mjs
+
+      - name: 重建網頁
+        run: node build_site.mjs
+
+      - name: 保存本輪資料供下一輪備援
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            data
+            assets
+          key: showtimes-data-${{ github.run_id }}
+
+      - name: 準備發佈內容
+        run: |
+          mkdir -p _site
+          cp out/index.html _site/
+          cp favicon.svg _site/
+          test -s _site/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
