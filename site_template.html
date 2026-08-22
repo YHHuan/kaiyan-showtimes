@@ -369,6 +369,7 @@
         <button id="vCinema" aria-pressed="false">按戲院</button>
       </div>
       <select id="area" aria-label="地區"></select>
+      <select id="lang" aria-label="配音語言"></select>
       <select id="slot" aria-label="時段">
         <option value="all">全時段</option>
         <option value="morning">早場 ‹12:00</option>
@@ -407,8 +408,33 @@ var DATA = __DATA__;
     "影展", "映畫祭", "座談", "映後", "映前", "導聆", "講座", "QA", "Q&A",
     "特別場", "海報場", "限定", "親子", "嬰兒車", "音樂會", "同樂會", "應援",
     "放映會", "見面會", "影人", "導演", "修復", "特映", "首映", "試映", "包場",
-    "情人節", "報名制", "聽．視界", "口述影像", "LIVE VIEWING", "LIVE"
+    "情人節", "報名制", "索取制", "免費放映", "聽．視界", "口述影像", "LIVE VIEWING", "LIVE",
+    // TFAI 等策展單位的節目單元名稱：這些場次正是這個站最該突顯的東西
+    "選映", "PICKS", "TIDF", "週年", "系列", "特別企劃", "單元", "策展", "回顧展"
   ].join("|"), "i");
+
+  // 配音語言。各家寫法差很多：「數位 英語」「ATMOS‧數位‧英文版」「2D/英語」，
+  // 開眼甚至只寫一個「英」字。語言關係到會不會買錯票（國語配音 vs 原音），所以要能篩。
+  var LANG_RULES = [
+    ["國語", /國語|中文版|國配|^國$|[‧・\/ ]國$/],
+    ["日語", /日語|日文版|^日$|[‧・\/ ]日$/],
+    ["英語", /英語|英文版|^英$|[‧・\/ ]英$/],
+    ["韓語", /韓語|韓文版|^韓$|[‧・\/ ]韓$/],
+    ["粵語", /粵語|粵文版|^粵$|[‧・\/ ]粵$/],
+    ["法語", /法語|法文版|^法$|[‧・\/ ]法$/],
+    ["義大利語", /義大利語|義語|^義$|[‧・\/ ]義$/],
+    ["挪威語", /挪威語|^挪$|[‧・\/ ]挪$/],
+    ["越南語", /越南語/],
+    ["印地語", /印地語|印度語/],
+    ["泰語", /泰語/],
+    ["台語", /台語(?!片)/]
+  ];
+
+  function langOf(tag) {
+    if (!tag) return null;
+    for (var i = 0; i < LANG_RULES.length; i++) if (LANG_RULES[i][1].test(tag)) return LANG_RULES[i][0];
+    return null;
+  }
 
   var C = DATA.cinemas, M = DATA.movies, H = DATA.halls, T = DATA.tags, U = DATA.urls, D = DATA.dates;
   var META = DATA.meta, SPRITE = DATA.sprite, PRICE = DATA.prices || [];
@@ -443,6 +469,8 @@ var DATA = __DATA__;
     return out;
   })();
 
+  var TAG_LANG = T.map(langOf); // 標籤索引 → 語言，先算好避免每次篩選重跑正規表達式
+
   // 索引：0=戲院 1=電影 2=日期 3=廳 4=標籤 5=分鐘數
   function isEvent(r) { var t = T[r[4]]; return !!t && EVENT_RE.test(t); }
   function hhmm(m) { return p2(Math.floor(m / 60)) + ":" + p2(m % 60); }
@@ -464,6 +492,7 @@ var DATA = __DATA__;
     view: store.get("view", "movie"),
     area: store.get("area", "全部"),
     slot: "all",
+    lang: "all",
     onlyEvent: false,
     onlySoon: false,
     showEnd: store.get("showEnd", "0") === "1",
@@ -544,6 +573,23 @@ var DATA = __DATA__;
     render();
   }
 
+  function renderLangOptions() {
+    var sel = document.getElementById("lang");
+    if (sel.options.length) return;
+    var found = {};
+    for (var i = 0; i < ROWS.length; i++) { var l = TAG_LANG[ROWS[i][4]]; if (l) found[l] = (found[l] || 0) + 1; }
+    var list = Object.keys(found).sort(function (a, b) { return found[b] - found[a]; });
+    var o0 = document.createElement("option");
+    o0.value = "all"; o0.textContent = "全部語言";
+    sel.appendChild(o0);
+    list.forEach(function (l) {
+      var o = document.createElement("option");
+      o.value = l; o.textContent = l;
+      sel.appendChild(o);
+    });
+    sel.value = state.lang;
+  }
+
   function renderAreaOptions() {
     var sel = document.getElementById("area");
     if (sel.options.length) return;
@@ -578,6 +624,7 @@ var DATA = __DATA__;
       } else if (r[2] !== di) continue;
       if (state.area !== "全部" && C[r[0]][1] !== state.area) continue;
       if (!slotOk(r[5])) continue;
+      if (state.lang !== "all" && TAG_LANG[r[4]] !== state.lang) continue;
       if (state.onlyEvent && !isEvent(r)) continue;
       if (state.onlySoon && state.date === NOW.date && r[5] < NOW.mins) continue;
       if (q && M[r[1]][0].toLowerCase().indexOf(q) < 0 && C[r[0]][0].toLowerCase().indexOf(q) < 0) continue;
@@ -778,6 +825,7 @@ var DATA = __DATA__;
     if (state.view !== "movie") p.set("v", state.view);
     if (state.area !== "全部") p.set("a", state.area);
     if (state.slot !== "all") p.set("s", state.slot);
+    if (state.lang !== "all") p.set("g", state.lang);
     if (state.q) p.set("q", state.q);
     if (state.onlyEvent) p.set("e", "1");
     if (state.onlySoon) p.set("n", "1");
@@ -805,6 +853,7 @@ var DATA = __DATA__;
     if (a && (a === "全部" || areas.indexOf(a) >= 0)) state.area = a;
     var s = p.get("s");
     if (s && ["all", "morning", "afternoon", "evening", "late"].indexOf(s) >= 0) state.slot = s;
+    if (p.get("g")) state.lang = p.get("g");
     if (p.get("q")) state.q = p.get("q").trim().toLowerCase();
     state.onlyEvent = p.get("e") === "1";
     state.onlySoon = p.get("n") === "1";
@@ -815,6 +864,7 @@ var DATA = __DATA__;
     syncUrl();
     renderDates();
     renderAreaOptions();
+    renderLangOptions();
     document.getElementById("vMovie").setAttribute("aria-pressed", String(state.view === "movie"));
     document.getElementById("vCinema").setAttribute("aria-pressed", String(state.view === "cinema"));
     document.getElementById("tEvent").setAttribute("aria-pressed", String(state.onlyEvent));
@@ -843,12 +893,13 @@ var DATA = __DATA__;
     b.appendChild(el("b", null, rows.length.toLocaleString("en-US")));
     b.appendChild(document.createTextNode(" 個場次"));
     sum.appendChild(b);
-    if (state.area !== "全部" || state.slot !== "all" || state.onlyEvent || state.onlySoon || state.q) {
+    if (state.area !== "全部" || state.slot !== "all" || state.lang !== "all" || state.onlyEvent || state.onlySoon || state.q) {
       var clr = el("button", "clear", "清除篩選");
       clr.onclick = function () {
-        state.area = "全部"; state.slot = "all"; state.onlyEvent = false; state.onlySoon = false; state.q = "";
+        state.area = "全部"; state.slot = "all"; state.lang = "all"; state.onlyEvent = false; state.onlySoon = false; state.q = "";
         document.getElementById("area").value = "全部";
         document.getElementById("slot").value = "all";
+        document.getElementById("lang").value = "all";
         document.getElementById("q").value = "";
         store.set("area", "全部");
         state.limit = 40;
@@ -943,6 +994,7 @@ var DATA = __DATA__;
   };
   document.getElementById("area").onchange = function (e) { state.area = e.target.value; store.set("area", state.area); state.limit = 40; render(); };
   document.getElementById("slot").onchange = function (e) { state.slot = e.target.value; state.limit = 40; render(); };
+  document.getElementById("lang").onchange = function (e) { state.lang = e.target.value; state.limit = 40; render(); };
   document.getElementById("q").addEventListener("input", function (e) {
     state.q = e.target.value.trim().toLowerCase();
     state.limit = 40;
@@ -951,6 +1003,7 @@ var DATA = __DATA__;
 
   readUrl();
   document.getElementById("slot").value = state.slot;
+  document.getElementById("lang").value = state.lang;
   document.getElementById("q").value = state.q;
   render();
 })();
