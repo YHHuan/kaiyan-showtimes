@@ -282,6 +282,21 @@
     .t { transition: border-color .12s ease, color .12s ease; }
   }
 
+  .price {
+    display: inline-block;
+    margin-left: 7px;
+    font-size: .7rem;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 5px;
+    text-decoration: none;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  a.price:hover { border-color: var(--accent); color: var(--accent); }
+  .price.approx { border-style: dashed; }
+
   /* 單片模式 */
   .titlebtn {
     font: inherit;
@@ -396,7 +411,7 @@ var DATA = __DATA__;
   ].join("|"), "i");
 
   var C = DATA.cinemas, M = DATA.movies, H = DATA.halls, T = DATA.tags, U = DATA.urls, D = DATA.dates;
-  var META = DATA.meta, SPRITE = DATA.sprite;
+  var META = DATA.meta, SPRITE = DATA.sprite, PRICE = DATA.prices || [];
 
   // 來源狀態：某家本輪沒抓到時，明講是沿用舊資料，不要讓使用者以為是即時的
   var NOTICE = "__NOTICE__";
@@ -582,6 +597,19 @@ var DATA = __DATA__;
     return m;
   }
 
+  // 各家票價按影廳規格分級，我們只拿得準「全票最低價」，所以一律標「起」。
+  // 有些影城的票價表是圖片、數字靠人工轉譯且不會自動更新，這種標成「參考」。
+  function priceTag(pr) {
+    var a = pr[1] ? document.createElement("a") : el("span");
+    a.className = "price" + (pr[2] ? " approx" : "");
+    if (pr[1]) { a.href = pr[1]; a.target = "_blank"; a.rel = "noopener"; }
+    a.textContent = "全票 $" + pr[0] + " 起";
+    a.title = pr[2]
+      ? "官方票價表為圖片，數字為人工轉譯、可能未及更新；點擊查看官方票價頁"
+      : "各影廳規格價格不同，此為全票最低價；點擊查看官方票價頁";
+    return a;
+  }
+
   function timeChip(r) {
     var a = el("a", "t");
     a.href = bookUrl(r);
@@ -608,6 +636,9 @@ var DATA = __DATA__;
     var n = el("div", "vname");
     if (area) n.appendChild(el("span", "area", area));
     n.appendChild(document.createTextNode(label));
+    // 票價：只掛在「按電影」的戲院列上（按戲院檢視時戲院名在卡片標題，價錢放那裡）
+    var pr = rows.length ? PRICE[rows[0][0]] : null;
+    if (pr) n.appendChild(priceTag(pr));
     v.appendChild(n);
     var times = el("div", "times");
     rows.sort(function (a, b) { return a[5] - b[5]; });

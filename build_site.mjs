@@ -41,6 +41,9 @@ for (const f of (await readdir(`${root}data`)).filter((f) => f.endsWith('.json')
     continue;
   }
   const rows = JSON.parse(await readFile(`${root}data/${f}`, 'utf8'));
+  // data/ 底下不是每個 json 都是場次陣列（prices/cinemas/movie_meta 是查表用的物件），
+  // 用型別判斷比維護排除清單穩固——之後新增查表檔也不會再炸掉建置。
+  if (!Array.isArray(rows)) continue;
   all.push(...rows);
   if (ageH != null) freshness[source] = ageH;
   console.log(`  ${f}: ${rows.length}${ageH != null && ageH > 26 ? `（${ageH.toFixed(0)}h 前，本輪未更新）` : ''}`);
@@ -239,6 +242,28 @@ const packed = [...groups.values()]
   .join(';');
 const rows = merged; // 只用來計數
 
+// ── 票價（data/prices.json）──────────────────────────────
+// 只取「全票」的最低價當作比較基準，標示成「起」。各家把票價按影廳規格分級，
+// 而場次的規格標籤（「數位 英語」）跟票價表的規格名（「2D數位電影」）對不起來，
+// 硬對會給出錯的數字；顯示最低全票價＋連到官方票價頁是誠實又有用的折衷。
+let prices = {};
+try {
+  prices = JSON.parse(await readFile(`${root}data/prices.json`, 'utf8'));
+} catch {}
+
+const priceByCinema = {};
+for (const [cinema, info] of Object.entries(prices)) {
+  const full = (info.tiers || [])
+    .map((t) => t.prices?.['全票'])
+    .filter((n) => typeof n === 'number');
+  if (!full.length) continue;
+  priceByCinema[cinema] = {
+    from: Math.min(...full),
+    url: info.url || null,
+    manual: /人工讀圖/.test(info.source || ''), // 這幾家的票價表是圖片，數字靠人工轉譯、不會自動更新
+  };
+}
+
 // 電影 metadata 對齊 movies 索引（meta 的鍵是各來源原始片名，一樣用 matchKey 對上）
 const metaByKey = new Map();
 for (const [k, v] of Object.entries(meta)) {
@@ -267,8 +292,14 @@ for (let i = 0; i < movies.list.length; i++) {
   if (Object.keys(entry).length) metaByIdx[i] = entry;
 }
 
+const cinemaPrice = cinemas.list.map((c) => {
+  const p = priceByCinema[c[0]];
+  return p ? [p.from, p.url, p.manual ? 1 : 0] : null;
+});
+
 const payload = {
   cinemas: cinemas.list,
+  prices: cinemaPrice,
   movies: movies.list,
   halls: halls.list,
   tags: tags.list,
