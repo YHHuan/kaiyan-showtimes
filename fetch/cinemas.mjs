@@ -77,9 +77,17 @@ async function geocode(cinemaName, address) {
   const city = cityOf(address);
   const district = districtOf(address);
 
-  const nameHit = pickHit(await nominatimSearch(`${cinemaName} ${city || ''}`.trim()), { city, district });
-  if (nameHit) return { lat: nameHit.lat, lng: nameHit.lng, method: 'osm-poi-name' };
+  // 1) 純館名（不加縣市）——實測 Nominatim 的自由文字比對對贅字很敏感，
+  //    「桃園青埔新光影城」查得到，「桃園青埔新光影城 桃園市」反而整個查不到，
+  //    所以先試最乾淨的版本。
+  let hit = pickHit(await nominatimSearch(cinemaName), { city, district });
+  // 2) 館名加縣市：純館名查不到、或通用館名（如「威秀影城」）不加縣市容易連錯縣市
+  //    都跑出來時，用這個消歧義。
+  if (!hit && city) hit = pickHit(await nominatimSearch(`${cinemaName} ${city}`), { city, district });
+  if (hit) return { lat: hit.lat, lng: hit.lng, method: 'osm-poi-name' };
 
+  // 3) 完整門牌地址：結構化地址查詢在台灣的命中率本來就偏低（許多門牌號不在 OSM
+  //    資料裡），當最後手段。
   const addrHit = pickHit(await nominatimSearch(address), { city, district, requireNonRoad: true });
   if (addrHit) return { lat: addrHit.lat, lng: addrHit.lng, method: 'osm-address' };
 

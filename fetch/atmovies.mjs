@@ -33,14 +33,13 @@ const BASE = 'https://www.atmovies.com.tw';
 // （實測 a01 是基隆，不是台北）、a03=桃園、a35=新竹、a04=台中、a06=台南、a07=高雄。
 // 白名單只收「非九大連鎖」的獨立單館／二輪戲院，逐一查證經營者後才收錄（見各行註解），
 // 且與 fetch/arthouse.mjs 互不重複。
+// 光點台北、真善美、TFAI 已改由 fetch/arthouse2.mjs 直接抓官方來源（有未來多天檔期，
+// 開眼只有當天），從這裡移除避免同一場次兩個來源、標籤不一致時冒出重複。
 const ARTHOUSE = {
   // -- 使用者指名／本任務起因：查「愛重奏」在誠品／光點查不到 --
   t02a08: { name: '誠品電影院', area: '台北市', region: 'a02', official: 'https://meet.eslite.com/tw/tc/gallery/movieschedule/201803020001' }, // 官網 arthouse.eslite.com 是舊式 ASP.NET WebForms，純 GET 抓不到場次時間
-  t02d20: { name: '光點台北電影院', area: '台北市', region: 'a02', official: 'http://www.spot.org.tw/schedule/schedule_one.html' }, // 官網 spot.org.tw 場次表整月是一張 JPG 圖片，無文字
 
   // -- 使用者指名的其餘藝文館 --
-  t02b07: { name: '真善美戲院', area: '台北市', region: 'a02', official: 'http://wonderful.movie.com.tw/time' }, // 官網 wonderful.movie.com.tw 場次靠 AJAX 動態載入，curl 拿不到時間
-  t02e22: { name: '國家電影及視聽文化中心', area: '新北市', region: 'a02', official: 'https://www.tfai.org.tw/program/calendar' }, // 官網 tfai.org.tw 被 Cloudflare Managed Challenge 擋下（403）
   // 注意：TFAI 開眼頁面本身也只有一張場次看板圖（<div class="theaterboard"><img.../></div>），
   // 沒有逐場次文字，實測會是 0 筆——留在白名單是誠實反映「兩邊都抓不到」，不是漏解析。
 

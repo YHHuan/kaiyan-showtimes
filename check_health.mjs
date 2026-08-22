@@ -21,6 +21,7 @@ const FLOOR = {
   in89: 100,         // in89 2 館，實測約 520
   atmovies: 40,      // 開眼補的藝文館，只有當天，實測約 240
   arthouse: 20,      // 光點華山＋府中15，實測約 180
+  arthouse2: 25,     // 真善美＋光點台北＋TFAI（TFAI 走 OPENTIX），實測約 128
   lux: 15,           // 樂聲，只公開兩天，實測約 80
 };
 const DROP_RATIO = 0.45;   // 跌到上一輪的 45% 以下＝可疑
