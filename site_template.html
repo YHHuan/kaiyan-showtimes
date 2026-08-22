@@ -281,6 +281,56 @@
     .card { transition: border-color .15s ease; }
     .t { transition: border-color .12s ease, color .12s ease; }
   }
+
+  /* 單片模式 */
+  .titlebtn {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+  }
+  .titlebtn:hover { color: var(--accent); }
+  .alldays {
+    border: 1px solid var(--accent);
+    background: none;
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 1px 9px;
+    font-size: .72rem;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .alldays:hover { background: var(--accent); color: var(--accent-ink); }
+  .back {
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: .84rem;
+    padding: 0 0 10px;
+    cursor: pointer;
+  }
+  .back:hover { color: var(--accent); }
+  .poster.big { flex-basis: 92px; width: 92px; height: 138px; }
+  .poster.big img { transform: scale(1.484); transform-origin: top left; }
+  .hint { color: var(--faint); font-size: .74rem; margin-top: 8px; }
+  .daycard { padding-top: 12px; }
+  .dayhead {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    padding-bottom: 3px;
+  }
+  .dayhead b {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: .95rem;
+  }
+  .dayhead span { color: var(--faint); font-size: .74rem; }
 </style>
 
 <div class="wrap">
@@ -383,9 +433,10 @@ var DATA = __DATA__;
   function hhmm(m) { return p2(Math.floor(m / 60)) + ":" + p2(m % 60); }
   // 訂票連結是每家戲院一個樣板；{d}=2026-08-21、{s}=2026%2F08%2F21（國賓那種帶查詢日期的）
   function bookUrl(r) {
+    var d = D[r[2]]; // 用這一筆場次自己的日期，不能用 state.date——單片模式下每筆日期都不同
     return (U[r[0]] || "")
-      .replace("{d}", state.date)
-      .replace("{s}", encodeURIComponent(state.date.replace(/-/g, "/")));
+      .replace("{d}", d)
+      .replace("{s}", encodeURIComponent(d.replace(/-/g, "/")));
   }
 
   var store = {
@@ -401,6 +452,8 @@ var DATA = __DATA__;
     onlyEvent: false,
     onlySoon: false,
     showEnd: store.get("showEnd", "0") === "1",
+    movie: null,      // 單片模式：鎖定某部電影，跨日期看全部場次
+    dates: [],        // 單片模式下的多選日期，空陣列＝全部日期
     q: "",
     limit: 40
   };
@@ -428,15 +481,52 @@ var DATA = __DATA__;
   function renderDates() {
     var box = document.getElementById("dates");
     box.textContent = "";
-    D.forEach(function (d) {
+    var single = state.movie != null;
+    // 單片模式下這排變成可複選的篩選器（都不選＝全部日期）；平常則是單選某一天
+    var showDates = single ? datesWithMovie(state.movie) : D;
+    showDates.forEach(function (d) {
       var b = el("button", "day");
       var dt = new Date(d + "T00:00:00");
       b.appendChild(el("b", null, d.slice(5).replace("-", "/")));
       b.appendChild(el("span", null, d === NOW.date ? "今天" : DOW[dt.getDay()]));
-      b.setAttribute("aria-pressed", String(d === state.date));
-      b.onclick = function () { state.date = d; state.limit = 40; render(); };
+      var on = single ? state.dates.indexOf(d) >= 0 : d === state.date;
+      b.setAttribute("aria-pressed", String(on));
+      b.onclick = function () {
+        if (single) {
+          var i = state.dates.indexOf(d);
+          if (i >= 0) state.dates.splice(i, 1); else state.dates.push(d);
+        } else {
+          state.date = d;
+        }
+        state.limit = 40;
+        render();
+      };
       box.appendChild(b);
     });
+  }
+
+  // 這部片有場次的日期（不受地區/時段等篩選影響，才不會讓日期列忽隱忽現）
+  function datesWithMovie(mi) {
+    var seen = {};
+    for (var i = 0; i < ROWS.length; i++) if (ROWS[i][1] === mi) seen[D[ROWS[i][2]]] = 1;
+    return D.filter(function (d) { return seen[d]; });
+  }
+
+  function openMovie(mi) {
+    state.movie = mi;
+    state.dates = [];
+    state.q = "";
+    document.getElementById("q").value = "";
+    state.limit = 40;
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function closeMovie() {
+    state.movie = null;
+    state.dates = [];
+    state.limit = 40;
+    render();
   }
 
   function renderAreaOptions() {
@@ -467,7 +557,10 @@ var DATA = __DATA__;
     var out = [];
     for (var i = 0; i < ROWS.length; i++) {
       var r = ROWS[i];
-      if (r[2] !== di) continue;
+      if (state.movie != null) {
+        if (r[1] !== state.movie) continue;
+        if (state.dates.length && state.dates.indexOf(D[r[2]]) < 0) continue;
+      } else if (r[2] !== di) continue;
       if (state.area !== "全部" && C[r[0]][1] !== state.area) continue;
       if (!slotOk(r[5])) continue;
       if (state.onlyEvent && !isEvent(r)) continue;
@@ -502,9 +595,9 @@ var DATA = __DATA__;
     var lab = T[r[4]] || H[r[3]];
     if (lab) a.appendChild(el("span", "lab", lab));
     if (isEvent(r)) a.className = "t ev";
-    if (state.date === NOW.date && r[5] < NOW.mins) a.className += " past";
+    if (D[r[2]] === NOW.date && r[5] < NOW.mins) a.className += " past";
     var hall = H[r[3]];
-    a.title = C[r[0]][0] + "　" + M[r[1]][0] + "　" + state.date + " " + hhmm(r[5]) +
+    a.title = C[r[0]][0] + "　" + M[r[1]][0] + "　" + D[r[2]] + " " + hhmm(r[5]) +
       (endM != null ? "　散場約 " + hhmm(endM) : "") +
       (hall ? "　" + hall : "") + (T[r[4]] ? "　" + T[r[4]] : "");
     return a;
@@ -521,6 +614,48 @@ var DATA = __DATA__;
     for (var i = 0; i < rows.length; i++) times.appendChild(timeChip(rows[i]));
     v.appendChild(times);
     return v;
+  }
+
+  // 單片模式最上面的那張卡：返回、海報、完整簡介、跨日期的統計
+  function movieHeader(mi, rows) {
+    var info = M[mi], meta = META[mi] || {};
+    var card = el("div", "card");
+
+    var back = el("button", "back", "← 回到所有電影");
+    back.onclick = closeMovie;
+    card.appendChild(back);
+
+    var head = el("div", "head");
+    if (meta.i != null && SPRITE) {
+      var box = el("div", "poster big");
+      var im = document.createElement("img");
+      im.src = SPRITE.uri;
+      im.alt = "";
+      im.width = SPRITE.cols * CELL_W;
+      im.height = SPRITE.rows * CELL_H;
+      im.style.left = -(meta.i % SPRITE.cols) * CELL_W + "px";
+      im.style.top = -Math.floor(meta.i / SPRITE.cols) * CELL_H + "px";
+      box.appendChild(im);
+      head.appendChild(box);
+    }
+    var ht = el("div", "headtext");
+    ht.appendChild(el("h2", null, info[0]));
+    if (info[1]) ht.appendChild(el("div", "en", info[1]));
+    var m1 = el("div", "meta");
+    if (info[2]) m1.appendChild(el("span", "pill", info[2]));
+    if (meta.d) m1.appendChild(el("span", "pill", meta.d + " 分"));
+    var nd = new Set(rows.map(function (r) { return r[2]; })).size;
+    var nc = new Set(rows.map(function (r) { return r[0]; })).size;
+    m1.appendChild(el("span", null, nd + " 天・" + nc + " 家戲院・" + rows.length + " 場"));
+    if (rows.some(isEvent)) m1.appendChild(el("span", "pill ev", "策展・活動場"));
+    ht.appendChild(m1);
+    if (meta.s) ht.appendChild(el("div", "syn open", meta.s));
+    ht.appendChild(el("div", "hint", state.dates.length
+      ? "已篩選 " + state.dates.length + " 個日期，再點一次日期可取消"
+      : "上方日期可複選，只看你要的那幾天"));
+    head.appendChild(ht);
+    card.appendChild(head);
+    return card;
   }
 
   function movieCard(mi, rows) {
@@ -542,7 +677,12 @@ var DATA = __DATA__;
     }
 
     var ht = el("div", "headtext");
-    ht.appendChild(el("h2", null, info[0]));
+    var h2 = el("h2");
+    var titleBtn = el("button", "titlebtn", info[0]);
+    titleBtn.title = "看這部片所有日期的場次";
+    titleBtn.onclick = function () { openMovie(mi); };
+    h2.appendChild(titleBtn);
+    ht.appendChild(h2);
     if (info[1]) ht.appendChild(el("div", "en", info[1]));
 
     var meta1 = el("div", "meta");
@@ -551,6 +691,12 @@ var DATA = __DATA__;
     var nc = new Set(rows.map(function (r) { return r[0]; })).size;
     meta1.appendChild(el("span", null, nc + " 家戲院・" + rows.length + " 場"));
     if (rows.some(isEvent)) meta1.appendChild(el("span", "pill ev", "策展・活動場"));
+    var nDays = datesWithMovie(mi).length;
+    if (nDays > 1) {
+      var all = el("button", "alldays", "看全部 " + nDays + " 天場次 →");
+      all.onclick = function () { openMovie(mi); };
+      meta1.appendChild(all);
+    }
     ht.appendChild(meta1);
 
     if (meta.s) {
@@ -594,7 +740,10 @@ var DATA = __DATA__;
   // 只寫非預設值，網址才不會又長又醜。
   function syncUrl() {
     var p = new URLSearchParams();
-    if (state.date !== D[0]) p.set("d", state.date);
+    if (state.movie != null) {
+      p.set("m", M[state.movie][0]);
+      if (state.dates.length) p.set("dd", state.dates.join(","));
+    } else if (state.date !== D[0]) p.set("d", state.date);
     if (state.view !== "movie") p.set("v", state.view);
     if (state.area !== "全部") p.set("a", state.area);
     if (state.slot !== "all") p.set("s", state.slot);
@@ -611,6 +760,13 @@ var DATA = __DATA__;
   function readUrl() {
     var p;
     try { p = new URLSearchParams(location.search); } catch (err) { return; }
+    var m = p.get("m");
+    if (m) {
+      // 用片名找回索引；片可能已經下檔，找不到就當一般模式處理
+      for (var mi = 0; mi < M.length; mi++) if (M[mi][0] === m) { state.movie = mi; break; }
+      var dd = p.get("dd");
+      if (state.movie != null && dd) state.dates = dd.split(",").filter(function (x) { return D.indexOf(x) >= 0; });
+    }
     var d = p.get("d");
     if (d && D.indexOf(d) >= 0) state.date = d;          // 網址上的日期可能已經過期，過期就忽略
     if (p.get("v") === "cinema") state.view = "cinema";
@@ -642,7 +798,11 @@ var DATA = __DATA__;
     var nCinemas = new Set(rows.map(function (r) { return r[0]; })).size;
     var sum = document.getElementById("summary");
     sum.textContent = "";
-    sum.appendChild(el("span", null, state.date));
+    var nDates = new Set(rows.map(function (r) { return r[2]; })).size;
+    sum.appendChild(el("span", null,
+      state.movie != null
+        ? (state.dates.length ? state.dates.length + " 個指定日期" : nDates + " 天全部場次")
+        : state.date));
     sum.appendChild(el("span", null, "·"));
     var b = el("span", null, "");
     b.appendChild(el("b", null, String(nMovies)));
@@ -671,6 +831,30 @@ var DATA = __DATA__;
       e.appendChild(el("b", null, "這個條件查不到場次"));
       e.appendChild(el("div", null, "換個日期、放寬地區或時段試試。"));
       list.appendChild(e);
+      return;
+    }
+
+    // 單片模式：一部片、跨日期，改成依「日期」分組，每天底下列各戲院場次
+    if (state.movie != null) {
+      list.appendChild(movieHeader(state.movie, rows));
+      var byDate = Array.from(group(rows, 2).entries()).sort(function (a, b) { return a[0] - b[0]; });
+      var frag2 = document.createDocumentFragment();
+      byDate.forEach(function (pair) {
+        var d = D[pair[0]];
+        var dt = new Date(d + "T00:00:00");
+        var card = el("div", "card daycard");
+        var hd = el("div", "dayhead");
+        hd.appendChild(el("b", null, d.slice(5).replace("-", "/") + "（" + DOW[dt.getDay()] + "）" + (d === NOW.date ? " 今天" : "")));
+        hd.appendChild(el("span", null, pair[1].length + " 場"));
+        card.appendChild(hd);
+        var vs2 = el("div", "venues");
+        Array.from(group(pair[1], 0).entries())
+          .sort(function (a, b) { return C[a[0]][0] < C[b[0]][0] ? -1 : 1; })
+          .forEach(function (cv) { vs2.appendChild(venueRow(C[cv[0]][0], C[cv[0]][1], cv[1])); });
+        card.appendChild(vs2);
+        frag2.appendChild(card);
+      });
+      list.appendChild(frag2);
       return;
     }
 
