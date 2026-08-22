@@ -25,7 +25,7 @@
 // （已知時也必要）要跟我們已知地址一致，結果類型不能是籠統的道路／行政區界——查不到
 // 就是查不到，寧可 lat/lng 留 null 也不要拿路口中點或同名分店的座標充數。
 import { politeFetch } from '../lib/common.mjs';
-import { writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir, readFile } from 'node:fs/promises';
 
 const OUT_PATH = new URL('../data/cinemas.json', import.meta.url).pathname;
 
@@ -329,6 +329,24 @@ await fetchAmbassador();
 await fetchMiranew();
 await fetchArthouseOfficial();
 await fetchAtmoviesAddresses();
+
+// 這支是整檔覆寫，查不到座標的會寫成 null。但 fetch/geocode_fill.mjs 之後會把缺的補上，
+// 直接覆寫等於每跑一次就把補好的座標清光。所以先讀回舊檔，保留我們這輪查不到、
+// 但先前已經有值的座標——寧可留著舊座標（戲院不會搬家），也不要每輪自己砍掉重練。
+try {
+  const prev = JSON.parse(await readFile(OUT_PATH, 'utf8'));
+  for (const [name, old] of Object.entries(prev)) {
+    const cur = records[name];
+    if (!cur) continue;
+    if ((cur.lat == null || cur.lng == null) && old.lat != null && old.lng != null) {
+      cur.lat = old.lat;
+      cur.lng = old.lng;
+      cur.geoPrecision = old.geoPrecision;
+      cur.source = old.source || cur.source;
+      cur.keptFromPrevious = true;
+    }
+  }
+} catch {}
 
 const total = Object.keys(records).length;
 const withLatLng = Object.values(records).filter((r) => r.lat != null && r.lng != null).length;

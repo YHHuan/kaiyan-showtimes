@@ -282,6 +282,19 @@
     .t { transition: border-color .12s ease, color .12s ease; }
   }
 
+  .dist {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: .7rem;
+    color: var(--event);
+    border: 1px solid var(--event);
+    background: var(--event-bg);
+    border-radius: 4px;
+    padding: 0 5px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .dist.rough { opacity: .75; border-style: dashed; }
   .price {
     display: inline-block;
     margin-left: 7px;
@@ -381,6 +394,7 @@
       <button class="toggle" id="tSoon" aria-pressed="false"><span class="box"></span>只看還來得及</button>
       <button class="toggle" id="tEnd" aria-pressed="false"><span class="box"></span>顯示散場時間</button>
       <input class="search" id="q" type="search" placeholder="搜尋片名或戲院…">
+      <button class="toggle" id="near" title="用瀏覽器定位，依距離排序戲院">離我最近</button>
       <button class="toggle" id="share" title="複製目前查詢的連結">分享這個查詢</button>
     </div>
   </div>
@@ -437,7 +451,7 @@ var DATA = __DATA__;
   }
 
   var C = DATA.cinemas, M = DATA.movies, H = DATA.halls, T = DATA.tags, U = DATA.urls, D = DATA.dates;
-  var META = DATA.meta, SPRITE = DATA.sprite, PRICE = DATA.prices || [];
+  var META = DATA.meta, SPRITE = DATA.sprite, PRICE = DATA.prices || [], GEO = DATA.geo || [];
 
   // 來源狀態：某家本輪沒抓到時，明講是沿用舊資料，不要讓使用者以為是即時的
   var NOTICE = "__NOTICE__";
@@ -657,6 +671,34 @@ var DATA = __DATA__;
     return a;
   }
 
+  // 定位只存在這個瀏覽器分頁裡，不會送到任何地方——距離全部在前端算。
+  var myPos = null;
+
+  function distKm(ci) {
+    var g = GEO[ci];
+    if (!g || !myPos) return null;
+    var R = 6371, toRad = Math.PI / 180;
+    var dLat = (g[0] - myPos.lat) * toRad, dLng = (g[1] - myPos.lng) * toRad;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(myPos.lat * toRad) * Math.cos(g[0] * toRad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function distTag(ci) {
+    var km = distKm(ci);
+    if (km == null) return null;
+    var g = GEO[ci];
+    var rough = g && g[3];
+    // 只查到路名的座標別報到百公尺，那是假的精確度
+    var text = rough
+      ? "約 " + (km < 1 ? "1" : km.toFixed(0)) + " 公里"
+      : (km < 1 ? Math.round(km * 1000) + " 公尺" : km.toFixed(1) + " 公里");
+    var t = el("span", "dist" + (rough ? " rough" : ""), text);
+    t.title = (rough ? "此影城座標只定位到路名，距離為概估。" : "") +
+      "直線距離，非實際路程" + (g && g[2] ? "　" + g[2] : "");
+    return t;
+  }
+
   function timeChip(r) {
     var a = el("a", "t");
     a.href = bookUrl(r);
@@ -678,6 +720,17 @@ var DATA = __DATA__;
     return a;
   }
 
+  // 有定位就照距離排，沒有就照名稱——查不到座標的一律排在最後，不要假裝很遠
+  function sortVenues(a, b) {
+    if (myPos) {
+      var da = distKm(a[0]), db = distKm(b[0]);
+      if (da != null && db != null && da !== db) return da - db;
+      if (da != null && db == null) return -1;
+      if (da == null && db != null) return 1;
+    }
+    return C[a[0]][0] < C[b[0]][0] ? -1 : 1;
+  }
+
   function venueRow(label, area, rows) {
     var v = el("div", "venue");
     var n = el("div", "vname");
@@ -686,6 +739,7 @@ var DATA = __DATA__;
     // 票價：只掛在「按電影」的戲院列上（按戲院檢視時戲院名在卡片標題，價錢放那裡）
     var pr = rows.length ? PRICE[rows[0][0]] : null;
     if (pr) n.appendChild(priceTag(pr));
+    if (rows.length) { var dt2 = distTag(rows[0][0]); if (dt2) n.appendChild(dt2); }
     v.appendChild(n);
     var times = el("div", "times");
     rows.sort(function (a, b) { return a[5] - b[5]; });
@@ -788,7 +842,7 @@ var DATA = __DATA__;
 
     var vs = el("div", "venues");
     Array.from(group(rows, 0).entries())
-      .sort(function (a, b) { return C[a[0]][0] < C[b[0]][0] ? -1 : 1; })
+      .sort(sortVenues)
       .forEach(function (pair) { vs.appendChild(venueRow(C[pair[0]][0], C[pair[0]][1], pair[1])); });
     card.appendChild(vs);
     return card;
@@ -931,7 +985,7 @@ var DATA = __DATA__;
         card.appendChild(hd);
         var vs2 = el("div", "venues");
         Array.from(group(pair[1], 0).entries())
-          .sort(function (a, b) { return C[a[0]][0] < C[b[0]][0] ? -1 : 1; })
+          .sort(sortVenues)
           .forEach(function (cv) { vs2.appendChild(venueRow(C[cv[0]][0], C[cv[0]][1], cv[1])); });
         card.appendChild(vs2);
         frag2.appendChild(card);
@@ -974,6 +1028,27 @@ var DATA = __DATA__;
   document.getElementById("tEvent").onclick = function () { state.onlyEvent = !state.onlyEvent; state.limit = 40; render(); };
   document.getElementById("tSoon").onclick = function () { state.onlySoon = !state.onlySoon; state.limit = 40; render(); };
   document.getElementById("tEnd").onclick = function () { state.showEnd = !state.showEnd; store.set("showEnd", state.showEnd ? "1" : "0"); render(); };
+  document.getElementById("near").onclick = function () {
+    var btn = this;
+    if (myPos) { myPos = null; btn.setAttribute("aria-pressed", "false"); btn.textContent = "離我最近"; render(); return; }
+    if (!navigator.geolocation) { btn.textContent = "此瀏覽器不支援定位"; return; }
+    btn.textContent = "定位中…";
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        myPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        btn.setAttribute("aria-pressed", "true");
+        btn.textContent = "離我最近";
+        render();
+      },
+      function (err) {
+        // 拒絕授權跟定位失敗要分開講，不然使用者不知道該怎麼辦
+        btn.textContent = err.code === 1 ? "已拒絕定位權限" : "定位失敗";
+        setTimeout(function () { btn.textContent = "離我最近"; }, 2600);
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 }
+    );
+  };
+
   document.getElementById("share").onclick = function () {
     var btn = this;
     var url = location.href;

@@ -264,6 +264,13 @@ for (const [cinema, info] of Object.entries(prices)) {
   };
 }
 
+// ── 影城地點（data/cinemas.json）──────────────────────────
+// 只帶座標與交通指引到前端；距離在瀏覽器端算（使用者的位置不該離開他的裝置）。
+let geo = {};
+try {
+  geo = JSON.parse(await readFile(`${root}data/cinemas.json`, 'utf8'));
+} catch {}
+
 // 電影 metadata 對齊 movies 索引（meta 的鍵是各來源原始片名，一樣用 matchKey 對上）
 const metaByKey = new Map();
 for (const [k, v] of Object.entries(meta)) {
@@ -297,9 +304,20 @@ const cinemaPrice = cinemas.list.map((c) => {
   return p ? [p.from, p.url, p.manual ? 1 : 0] : null;
 });
 
+// 對齊 cinemas 索引：[緯度, 經度, 交通指引]；查不到座標的給 null
+const cinemaGeo = cinemas.list.map((c) => {
+  const g = geo[c[0]];
+  if (!g || typeof g.lat !== 'number' || typeof g.lng !== 'number') return null;
+  // 第四個值：座標是否只精確到路名（geocode 退而求其次的結果）。
+  // 用來決定前端要不要顯示到百公尺——排序沒問題，但別假裝知道確切門牌。
+  const rough = g.geoPrecision === 'road' ? 1 : 0;
+  return [Number(g.lat.toFixed(5)), Number(g.lng.toFixed(5)), g.transit || null, rough];
+});
+
 const payload = {
   cinemas: cinemas.list,
   prices: cinemaPrice,
+  geo: cinemaGeo,
   movies: movies.list,
   halls: halls.list,
   tags: tags.list,
@@ -310,6 +328,7 @@ const payload = {
   sprite: sprite ? { uri: sprite.uri, cols: SPRITE_COLS, rows: sprite.rows } : null,
 };
 
+const withGeo = cinemaGeo.filter(Boolean).length;
 const withPoster = Object.values(metaByIdx).filter((m) => m.i != null).length;
 const withSyn = Object.values(metaByIdx).filter((m) => m.s).length;
 const sources = [...new Set(merged.map((r) => r.source))].map((s) => SOURCE_NAMES[s] || s).join('、');
@@ -356,6 +375,6 @@ await mkdir(`${root}out`, { recursive: true }); // 乾淨 checkout 下 out/ 不�
 await writeFile(`${root}out/index.html`, html);
 console.log(
   `\nout/index.html: ${rows.length} 場次 / ${cinemas.list.length} 影城 / ${movies.list.length} 部片` +
-    `（${mergedTitles} 部跨影城異名合併、${eventFolded} 個特別場歸戶、海報 ${withPoster}、簡介 ${withSyn}）` +
+    `（${mergedTitles} 部跨影城異名合併、${eventFolded} 個特別場歸戶、海報 ${withPoster}、簡介 ${withSyn}、座標 ${withGeo}）` +
     `, ${(html.length / 1024 / 1024).toFixed(2)} MB`,
 );
