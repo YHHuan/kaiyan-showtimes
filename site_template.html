@@ -354,6 +354,12 @@
       </div>
       <select id="area" aria-label="地區"></select>
       <select id="lang" aria-label="配音語言"></select>
+      <select id="sort" aria-label="戲院排序">
+        <option value="area">依地區</option>
+        <option value="next">最快開演</option>
+        <option value="dist">距離最近</option>
+        <option value="price">票價最低</option>
+      </select>
       <select id="slot" aria-label="時段">
         <option value="all">全時段</option>
         <option value="morning">早場 ‹12:00</option>
@@ -362,7 +368,7 @@
         <option value="late">午夜 22:00›</option>
       </select>
       <button class="toggle" id="tEvent" aria-pressed="false"><span class="box"></span>只看策展・活動場</button>
-      <button class="toggle" id="tSoon" aria-pressed="false"><span class="box"></span>只看還來得及</button>
+      <button class="toggle" id="tSoon" aria-pressed="false">顯示已開演場次</button>
       <button class="toggle" id="tEnd" aria-pressed="false"><span class="box"></span>顯示散場時間</button>
       <input class="search" id="q" type="search" placeholder="搜尋片名或戲院…">
       <button class="toggle" id="near" title="用瀏覽器定位，依距離排序戲院">離我最近</button>
@@ -478,8 +484,10 @@ var DATA = __DATA__;
     area: store.get("area", "全部"),
     slot: "all",
     lang: "all",
+    sort: "area",
+    expanded: {},   // 哪幾部片的戲院清單已展開
     onlyEvent: false,
-    onlySoon: false,
+    showPast: false,   // 預設隱藏今天已開演的場次——全部列出再變灰對決策沒幫助
     showEnd: store.get("showEnd", "0") === "1",
     movie: null,      // 單片模式：鎖定某部電影，跨日期看全部場次
     dates: [],        // 單片模式下的多選日期，空陣列＝全部日期
@@ -611,7 +619,7 @@ var DATA = __DATA__;
       if (!slotOk(r[5])) continue;
       if (state.lang !== "all" && TAG_LANG[r[4]] !== state.lang) continue;
       if (state.onlyEvent && !isEvent(r)) continue;
-      if (state.onlySoon && state.date === NOW.date && r[5] < NOW.mins) continue;
+      if (!state.showPast && D[r[2]] === NOW.date && r[5] < NOW.mins) continue;
       if (q && M[r[1]][0].toLowerCase().indexOf(q) < 0 && C[r[0]][0].toLowerCase().indexOf(q) < 0) continue;
       out.push(r);
     }
@@ -691,22 +699,40 @@ var DATA = __DATA__;
     return a;
   }
 
-  // 有定位就照距離排，沒有就照名稱——查不到座標的一律排在最後，不要假裝很遠
+  // 排序直接改變比較邏輯，所以做成明示的選項而不是藏在篩選器裡。
+  // 沒有該欄位資料的（查不到座標、查不到票價）一律排在最後，不要假裝它很遠或很貴。
   function sortVenues(a, b) {
-    if (myPos) {
-      var da = distKm(a[0]), db = distKm(b[0]);
-      if (da != null && db != null && da !== db) return da - db;
-      if (da != null && db == null) return -1;
-      if (da == null && db != null) return 1;
+    var byName = C[a[0]][0] < C[b[0]][0] ? -1 : 1;
+    function nullsLast(va, vb) {
+      if (va != null && vb != null && va !== vb) return va - vb;
+      if (va != null && vb == null) return -1;
+      if (va == null && vb != null) return 1;
+      return byName;
     }
-    return C[a[0]][0] < C[b[0]][0] ? -1 : 1;
+    if (state.sort === "dist" || (state.sort === "area" && myPos)) return nullsLast(distKm(a[0]), distKm(b[0]));
+    if (state.sort === "next") return nullsLast(a[1][0] && a[1][0][5], b[1][0] && b[1][0][5]);
+    if (state.sort === "price") return nullsLast(PRICE[a[0]] && PRICE[a[0]][0], PRICE[b[0]] && PRICE[b[0]][0]);
+    // 依地區：同縣市的排在一起，區內照名稱
+    var aa = C[a[0]][1] || "", ba = C[b[0]][1] || "";
+    if (aa !== ba) return aa < ba ? -1 : 1;
+    return byName;
   }
 
   // 地區是集合標題，不是每家戲院都掛一次的 metadata——同一區重複幾十次是純視覺噪音。
-  function appendVenues(container, rows) {
-    var byCinema = Array.from(group(rows, 0).entries()).sort(sortVenues);
+  var VENUE_PREVIEW = 6; // 一部熱門片可能同時在 60 幾家上映，全部平鋪等於沒有排序
+
+  function appendVenues(container, rows, movieIdx) {
+    var byCinema = Array.from(group(rows, 0).entries());
+    // 「最快開演」需要每家的第一場，先各自排好時間再比
+    byCinema.forEach(function (p) { p[1].sort(function (x, y) { return x[5] - y[5]; }); });
+    byCinema.sort(sortVenues);
+
+    var expanded = movieIdx == null || state.expanded[movieIdx];
+    var shown = expanded ? byCinema : byCinema.slice(0, VENUE_PREVIEW);
+    var rest = byCinema.length - shown.length;
+
     var lastArea = null;
-    byCinema.forEach(function (pair) {
+    shown.forEach(function (pair) {
       var area = C[pair[0]][1] || "其他";
       // 有定位時是依距離排序，跨區跳來跳去，這時不下地區標題反而更清楚
       if (!myPos && area !== lastArea) {
@@ -718,6 +744,20 @@ var DATA = __DATA__;
       }
       container.appendChild(venueRow(C[pair[0]][0], null, pair[1]));
     });
+
+    if (rest > 0) {
+      // 不只說「還有 N 家」，要說是哪些地區的——使用者才知道值不值得展開
+      var byArea = {};
+      byCinema.slice(shown.length).forEach(function (p) {
+        var a = C[p[0]][1] || "其他";
+        byArea[a] = (byArea[a] || 0) + 1;
+      });
+      var breakdown = Object.keys(byArea).sort(function (x, y) { return byArea[y] - byArea[x]; })
+        .map(function (a) { return a + " " + byArea[a]; }).join("・");
+      var more = el("button", "more", "另有 " + rest + " 家戲院　" + breakdown);
+      more.onclick = function () { state.expanded[movieIdx] = true; render(); };
+      container.appendChild(more);
+    }
   }
 
   function venueRow(label, area, rows) {
@@ -855,7 +895,7 @@ var DATA = __DATA__;
     card.appendChild(head);
 
     var vs = el("div", "venues");
-    appendVenues(vs, rows);
+    appendVenues(vs, rows, mi);
     card.appendChild(vs);
     return card;
   }
@@ -892,9 +932,10 @@ var DATA = __DATA__;
     if (state.area !== "全部") p.set("a", state.area);
     if (state.slot !== "all") p.set("s", state.slot);
     if (state.lang !== "all") p.set("g", state.lang);
+    if (state.sort !== "area") p.set("o", state.sort);
     if (state.q) p.set("q", state.q);
     if (state.onlyEvent) p.set("e", "1");
-    if (state.onlySoon) p.set("n", "1");
+    if (state.showPast) p.set("n", "1");
     if (state.showEnd) p.set("t", "1");
     var qs = p.toString();
     try {
@@ -920,9 +961,10 @@ var DATA = __DATA__;
     var s = p.get("s");
     if (s && ["all", "morning", "afternoon", "evening", "late"].indexOf(s) >= 0) state.slot = s;
     if (p.get("g")) state.lang = p.get("g");
+    if (["next","dist","price"].indexOf(p.get("o")) >= 0) state.sort = p.get("o");
     if (p.get("q")) state.q = p.get("q").trim().toLowerCase();
     state.onlyEvent = p.get("e") === "1";
-    state.onlySoon = p.get("n") === "1";
+    state.showPast = p.get("n") === "1";
     if (p.get("t") === "1") state.showEnd = true;
   }
 
@@ -934,7 +976,7 @@ var DATA = __DATA__;
     document.getElementById("vMovie").setAttribute("aria-pressed", String(state.view === "movie"));
     document.getElementById("vCinema").setAttribute("aria-pressed", String(state.view === "cinema"));
     document.getElementById("tEvent").setAttribute("aria-pressed", String(state.onlyEvent));
-    document.getElementById("tSoon").setAttribute("aria-pressed", String(state.onlySoon));
+    document.getElementById("tSoon").setAttribute("aria-pressed", String(state.showPast));
     document.getElementById("tEnd").setAttribute("aria-pressed", String(state.showEnd));
 
     var rows = filtered();
@@ -959,13 +1001,14 @@ var DATA = __DATA__;
     b.appendChild(el("b", null, rows.length.toLocaleString("en-US")));
     b.appendChild(document.createTextNode(" 個場次"));
     sum.appendChild(b);
-    if (state.area !== "全部" || state.slot !== "all" || state.lang !== "all" || state.onlyEvent || state.onlySoon || state.q) {
+    if (state.area !== "全部" || state.slot !== "all" || state.lang !== "all" || state.onlyEvent || state.showPast || state.q || state.sort !== "area") {
       var clr = el("button", "clear", "清除篩選");
       clr.onclick = function () {
-        state.area = "全部"; state.slot = "all"; state.lang = "all"; state.onlyEvent = false; state.onlySoon = false; state.q = "";
+        state.area = "全部"; state.slot = "all"; state.lang = "all"; state.onlyEvent = false; state.showPast = false; state.q = ""; state.sort = "area";
         document.getElementById("area").value = "全部";
         document.getElementById("slot").value = "all";
         document.getElementById("lang").value = "all";
+        document.getElementById("sort").value = "area";
         document.getElementById("q").value = "";
         store.set("area", "全部");
         state.limit = 40;
@@ -1036,7 +1079,7 @@ var DATA = __DATA__;
   document.getElementById("vMovie").onclick = function () { state.view = "movie"; state.limit = 40; store.set("view", "movie"); render(); };
   document.getElementById("vCinema").onclick = function () { state.view = "cinema"; state.limit = 40; store.set("view", "cinema"); render(); };
   document.getElementById("tEvent").onclick = function () { state.onlyEvent = !state.onlyEvent; state.limit = 40; render(); };
-  document.getElementById("tSoon").onclick = function () { state.onlySoon = !state.onlySoon; state.limit = 40; render(); };
+  document.getElementById("tSoon").onclick = function () { state.showPast = !state.showPast; state.limit = 40; render(); };
   document.getElementById("tEnd").onclick = function () { state.showEnd = !state.showEnd; store.set("showEnd", state.showEnd ? "1" : "0"); render(); };
   document.getElementById("near").onclick = function () {
     var btn = this;
@@ -1080,6 +1123,12 @@ var DATA = __DATA__;
   document.getElementById("area").onchange = function (e) { state.area = e.target.value; store.set("area", state.area); state.limit = 40; render(); };
   document.getElementById("slot").onchange = function (e) { state.slot = e.target.value; state.limit = 40; render(); };
   document.getElementById("lang").onchange = function (e) { state.lang = e.target.value; state.limit = 40; render(); };
+  document.getElementById("sort").onchange = function (e) {
+    state.sort = e.target.value;
+    // 選了依距離卻還沒定位，直接幫他觸發，不要讓他選了卻沒反應
+    if (state.sort === "dist" && !myPos) document.getElementById("near").click();
+    render();
+  };
   document.getElementById("q").addEventListener("input", function (e) {
     state.q = e.target.value.trim().toLowerCase();
     state.limit = 40;
@@ -1089,6 +1138,7 @@ var DATA = __DATA__;
   readUrl();
   document.getElementById("slot").value = state.slot;
   document.getElementById("lang").value = state.lang;
+  document.getElementById("sort").value = state.sort;
   document.getElementById("q").value = state.q;
   render();
 })();
