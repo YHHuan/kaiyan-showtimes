@@ -297,6 +297,8 @@
 
   footer { margin-top: 40px; border-top: 2px solid var(--rule); padding-top: 14px; color: var(--ink3); font-size: 12px; line-height: 1.7; }
   footer p { margin: 4px 0; }
+  footer a { color: var(--ink2); }
+  footer a:hover { color: var(--red); }
   footer b { color: var(--ink2); }
 
   /* ── 單片模式 ─────────────────────────────── */
@@ -380,7 +382,11 @@
   <div id="list"></div>
 
   <footer>
-    <p>資料來源：<b>__SOURCES__</b> 各家官方公開場次頁／API。點場次可跳轉至該影城訂票入口。</p>
+    <p>資料來源：<b>__SOURCES__</b> 各家官方公開場次頁／API。本站只顯示場次時刻，
+      <b>不提供訂票也不處理付款</b>；點場次會跳轉至該影城自己的訂票頁完成購票。</p>
+    <p>若您是影城業者，希望調整或移除本站呈現的貴公司場次資料，請至
+      <a href="https://github.com/YHHuan/kaiyan-showtimes/issues" target="_blank" rel="noopener">GitHub Issues</a>
+      告知，我們會儘速配合處理。</p>
     <p>場次更新於 <b>__GENERATED__</b>，每日自動重抓。<span id="notice"></span>
       實際場次與票種以各影城官方公告為準；威秀影城因全站機器人防護尚未納入。</p>
     <p>散場時間為估算（片長＋約 12 分鐘廣告），僅供參考。</p>
