@@ -12,6 +12,22 @@ import { readFile, writeFile } from 'node:fs/promises';
 const root = new URL('.', import.meta.url).pathname;
 
 // 硬性下限抓得比實際值寬鬆很多，只用來抓「整個解析壞掉」，不是抓淡季少排片
+// 每個來源的「資料形狀」。筆數對不代表資料是好的——解析器壞掉時常見的樣子是
+// 筆數正常但欄位全空（廳別全變 null）、或時間全部解析成同一個值。這些用筆數檢查抓不到。
+// 下面的比例是實測基準，只在「明顯崩掉」時才報警，正常的季節性變動不會誤觸。
+const SHAPE = {
+  ambassador:  { hallPct: [80, 100], movies: [15, 80] },
+  centuryasia: { hallPct: [80, 100], movies: [20, 80] },
+  skcinemas:   { hallPct: [80, 100], movies: [8, 60] },
+  miranew:     { hallPct: [80, 100], movies: [5, 50] },
+  lux:         { hallPct: [80, 100], movies: [4, 40] },
+  in89:        { hallPct: [50, 100], movies: [10, 60] },
+  showtimes:   { hallPct: [0, 100],  movies: [20, 90] },
+  atmovies:    { hallPct: [0, 100],  movies: [15, 90] },
+  arthouse:    { hallPct: [50, 100], movies: [20, 200] },
+  arthouse2:   { hallPct: [0, 100],  movies: [10, 150] },
+};
+
 const FLOOR = {
   showtimes: 1500,   // 秀泰 15 館，實測約 5900
   ambassador: 800,   // 國賓 9 館，實測約 3100
@@ -68,6 +84,29 @@ for (const [source, floor] of Object.entries(FLOOR)) {
   if (ageH > 26) {
     warnings.push(`${source}: 沿用 ${ageH.toFixed(0)} 小時前的資料（本輪抓取失敗）`);
   }
+  // 讀實際資料檢查形狀，光看 _status.json 的筆數會漏掉「解析壞掉但筆數正常」
+  const shape = SHAPE[source];
+  if (shape) {
+    try {
+      const rows = JSON.parse(await readFile(`${root}data/${source}.json`, 'utf8'));
+      if (Array.isArray(rows) && rows.length) {
+        const hallPct = Math.round((rows.filter((r) => r.hall).length * 100) / rows.length);
+        const movies = new Set(rows.map((r) => r.movie)).size;
+        const times = new Set(rows.map((r) => r.time)).size;
+        if (hallPct < shape.hallPct[0] || hallPct > shape.hallPct[1]) {
+          warnings.push(`${source}: 有廳別的比例 ${hallPct}%，超出常態 ${shape.hallPct.join('~')}% —— 解析可能壞了一半`);
+        }
+        if (movies < shape.movies[0] || movies > shape.movies[1]) {
+          warnings.push(`${source}: 片名數 ${movies}，超出常態 ${shape.movies.join('~')} —— 片名欄位可能沒解析對`);
+        }
+        if (times < 5) {
+          problems.push(`${source}: 全部場次只有 ${times} 種時間值 —— 時間欄位幾乎確定解析錯了`);
+          continue;
+        }
+      }
+    } catch {}
+  }
+
   healthy[source] = s.count;
   total += s.count;
 }

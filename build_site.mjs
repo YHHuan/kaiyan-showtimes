@@ -369,7 +369,8 @@ const html = tpl
   .replace(/__NOTICE__/g, notice)
   .replace(/__NCINEMA__/g, String(cinemas.list.length))
   .replace(/__NMOVIE__/g, String(movies.list.length))
-  .replace(/__NSESSION__/g, rows.length.toLocaleString('en-US'));
+  .replace(/__NSESSION__/g, rows.length.toLocaleString('en-US'))
+  .replace(/__LASTDATE__/g, dates.list.length ? dates.list[dates.list.length - 1].slice(5).replace('-', '/') : '—');
 
 await mkdir(`${root}out`, { recursive: true }); // 乾淨 checkout 下 out/ 不存在（已 gitignore）
 await writeFile(`${root}out/index.html`, html);

@@ -4,217 +4,206 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <style>
+  /* 「開演」的視覺立場：這不是 SaaS 儀表板，也不是海報藝廊，是一份為今晚做決定
+     而編排的當代影劇版。所以——紙色不是冷灰、用線不用卡、用基線不用陰影。
+     刻意避開的東西：圓角尺度、卡片浮起、毛玻璃、等寬字型當裝飾、每個資訊都裝進藥丸。 */
   :root {
-    --bg: #F5F7F9;
-    --surface: #FFFFFF;
-    --sunk: #EFF2F5;
-    --ink: #151B23;
-    --muted: #69737F;
-    --faint: #98A2AD;
-    --line: #E1E6EB;
-    --accent: #D33C22;
-    --accent-ink: #FFFFFF;
-    --event: #0D7A6F;
-    --event-bg: #E4F2F0;
-    --shadow: 0 1px 2px rgba(21, 27, 35, .05), 0 6px 16px -10px rgba(21, 27, 35, .18);
+    --paper: #F3F0E8;      /* 報紙底色，不是冷灰 SaaS 背景 */
+    --sheet: #FBFAF6;      /* 內容面，與底色只差一點，層級交給線條 */
+    --ink: #191713;
+    --ink2: #625E56;       /* 次要文字，仍然讀得清楚，不是淡到看不見 */
+    --ink3: #8A857B;
+    --line: #D5D0C5;       /* 一般細線 */
+    --rule: #292621;       /* 分段粗線，版面的骨架 */
+    --red: #B52A1D;        /* 戲院紅，稀缺使用 */
+    --red-bg: #F3E2DC;
+    --blue: #28627A;       /* 策展・活動場，與紅色分工明確 */
+    --blue-bg: #E2EDF0;
   }
   :root:not([data-theme="light"]) {
     @media (prefers-color-scheme: dark) {
-      --bg: #0F1418;
-      --surface: #171E24;
-      --sunk: #1E262D;
-      --ink: #E7ECF1;
-      --muted: #8B97A3;
-      --faint: #6B7681;
-      --line: #28313A;
-      --accent: #FF6A4D;
-      --accent-ink: #14191D;
-      --event: #43C3B2;
-      --event-bg: #12302E;
-      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 20px -12px rgba(0, 0, 0, .7);
+      --paper: #171613;
+      --sheet: #201E1A;
+      --ink: #EEE9DE;
+      --ink2: #A9A297;
+      --ink3: #7C7669;
+      --line: #403C35;
+      --rule: #6A6459;
+      --red: #E05B47;
+      --red-bg: #3A211C;
+      --blue: #6FA8C0;
+      --blue-bg: #1B2E36;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #0F1418;
-    --surface: #171E24;
-    --sunk: #1E262D;
-    --ink: #E7ECF1;
-    --muted: #8B97A3;
-    --faint: #6B7681;
-    --line: #28313A;
-    --accent: #FF6A4D;
-    --accent-ink: #14191D;
-    --event: #43C3B2;
-    --event-bg: #12302E;
-    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 20px -12px rgba(0, 0, 0, .7);
+    --paper: #171613;
+    --sheet: #201E1A;
+    --ink: #EEE9DE;
+    --ink2: #A9A297;
+    --ink3: #7C7669;
+    --line: #403C35;
+    --rule: #6A6459;
+    --red: #E05B47;
+    --red-bg: #3A211C;
+    --blue: #6FA8C0;
+    --blue-bg: #1B2E36;
   }
 
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: var(--bg);
+    background: var(--paper);
     color: var(--ink);
     font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
-    line-height: 1.55;
+    font-size: 15px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 18px 72px; }
+  /* 場次表全靠數字垂直對齊來掃讀，所以整站開等寬數字——但不用等寬「字型」，
+     那會讓中文也被拉成資料介面的語氣。 */
+  body { font-variant-numeric: tabular-nums; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px 80px; }
 
-  /* ── 頁首 ───────────────────────────────── */
-  header { padding: 26px 0 8px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-  .brand { display: flex; align-items: baseline; gap: 10px; }
+  /* ── 報頭 ────────────────────────────────── */
+  header {
+    padding: 28px 0 10px;
+    border-bottom: 2px solid var(--rule);
+    margin-bottom: 0;
+  }
+  .brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   h1 {
     font-family: "Noto Serif TC", serif;
     font-weight: 900;
-    font-size: 1.85rem;
-    letter-spacing: .1em;
+    font-size: 32px;
+    letter-spacing: .06em;
     margin: 0;
+    line-height: 1.15;
   }
-  h1 .dot { color: var(--accent); }
-  .sub { color: var(--muted); font-size: .84rem; padding-bottom: .2em; }
-  .stats { margin-left: auto; display: flex; gap: 18px; padding-bottom: .25em; }
-  .stat { text-align: right; }
-  .stat b {
-    display: block;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: 1.05rem;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-  .stat span { font-size: .68rem; color: var(--faint); letter-spacing: .06em; }
+  h1 .dot { color: var(--red); }
+  .sub { color: var(--ink2); font-size: 13px; }
+  /* 涵蓋範圍是可信度，不是儀表板 KPI——濃縮成一行說明文字 */
+  .stats { margin-left: auto; color: var(--ink3); font-size: 12px; letter-spacing: .02em; }
+  .stat { display: inline; }
+  .stat b { font-weight: 700; color: var(--ink2); }
+  .stat span { display: none; }
 
-  /* ── 控制列 ─────────────────────────────── */
+  /* ── 控制列 ───────────────────────────────── */
   .controls {
     position: sticky;
     top: 0;
     z-index: 20;
-    background: color-mix(in srgb, var(--bg) 92%, transparent);
-    backdrop-filter: blur(8px);
+    background: var(--paper);
     border-bottom: 1px solid var(--line);
-    margin: 0 -18px;
-    padding: 10px 18px 9px;
+    margin: 0 -24px;
+    padding: 10px 24px 10px;
   }
-  .dates { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+  .dates { display: flex; gap: 0; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+  /* 日期是一條連續標尺，不是十四顆漂浮按鈕 */
   .day {
     flex: 0 0 auto;
-    border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--ink);
-    border-radius: 8px;
-    padding: 5px 11px 6px;
+    border: 0;
+    border-right: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink2);
+    padding: 3px 12px 4px;
     cursor: pointer;
     font-family: inherit;
     text-align: center;
     line-height: 1.25;
-    min-width: 58px;
+    min-width: 56px;
   }
-  .day b {
-    display: block;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: .92rem;
-    font-weight: 600;
-  }
-  .day span { font-size: .66rem; color: var(--muted); }
-  .day[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  .day[aria-pressed="true"] span { color: var(--accent-ink); opacity: .85; }
+  .day:first-child { border-left: 1px solid var(--line); }
+  .day b { display: block; font-size: 15px; font-weight: 600; }
+  .day span { font-size: 11px; color: var(--ink3); }
+  .day[aria-pressed="true"] { background: var(--red); color: #FBFAF6; }
+  .day[aria-pressed="true"] b { font-weight: 700; }
+  .day[aria-pressed="true"] span { color: #FBFAF6; opacity: .8; }
 
-  .row2 { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
-  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+  .row2 { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
   .seg button {
     border: 0;
     background: transparent;
-    color: var(--muted);
+    color: var(--ink2);
     font-family: inherit;
-    font-size: .84rem;
-    padding: 5px 13px;
+    font-size: 13px;
+    padding: 4px 12px;
     cursor: pointer;
   }
-  .seg button[aria-pressed="true"] { background: var(--sunk); color: var(--ink); font-weight: 700; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--sheet); font-weight: 700; }
   select, .search {
     border: 1px solid var(--line);
-    background: var(--surface);
+    background: var(--sheet);
     color: var(--ink);
-    border-radius: 8px;
-    padding: 5px 10px;
-    font-size: .84rem;
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 13px;
     font-family: inherit;
   }
-  .search { flex: 1 1 150px; min-width: 130px; }
-  .search::placeholder { color: var(--faint); }
+  .search { flex: 1 1 160px; min-width: 140px; }
+  .search::placeholder { color: var(--ink3); }
   .toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
     border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--muted);
-    border-radius: 8px;
-    padding: 5px 11px;
-    font-size: .84rem;
+    background: transparent;
+    color: var(--ink2);
+    border-radius: 3px;
+    padding: 4px 10px;
+    font-size: 13px;
     font-family: inherit;
     cursor: pointer;
   }
-  .toggle[aria-pressed="true"] { border-color: var(--event); color: var(--event); background: var(--event-bg); font-weight: 700; }
-  .toggle .box { width: 9px; height: 9px; border-radius: 2px; border: 1.5px solid currentColor; }
-  .toggle[aria-pressed="true"] .box { background: currentColor; }
+  .toggle[aria-pressed="true"] { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); font-weight: 700; }
+  .toggle .box { display: none; }
   button:focus-visible, select:focus-visible, .search:focus-visible, a:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
+    outline: 2px solid var(--red);
+    outline-offset: 1px;
   }
 
-  .summary { color: var(--muted); font-size: .8rem; margin: 14px 2px 12px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .summary { color: var(--ink2); font-size: 13px; margin: 16px 0 4px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
   .summary b { color: var(--ink); font-weight: 700; }
-  .summary .clear { color: var(--accent); cursor: pointer; background: none; border: 0; font-family: inherit; font-size: .8rem; padding: 0; }
+  .summary .clear { color: var(--red); cursor: pointer; background: none; border: 0; font-family: inherit; font-size: 13px; padding: 0; }
 
-  /* ── 卡片 ───────────────────────────────── */
+  /* ── 電影段落：連續版面，不是一疊卡片 ───────────── */
   .card {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 15px 17px;
-    margin-bottom: 12px;
-    box-shadow: var(--shadow);
+    background: transparent;
+    border: 0;
+    border-top: 2px solid var(--rule);
+    border-radius: 0;
+    padding: 16px 0 0;
+    margin: 0 0 28px;
+    box-shadow: none;
   }
-  .head { display: flex; gap: 13px; align-items: flex-start; }
-  /* 海報全部拼在一張 sprite 圖裡，用定位裁出單一畫格 */
+  .head { display: flex; gap: 16px; align-items: flex-start; }
   .poster {
     flex: 0 0 62px;
     width: 62px;
     height: 93px;
-    border-radius: 5px;
-    background-color: var(--sunk);
-    border: 1px solid var(--line);
+    border-radius: 0;
+    background-color: var(--line);
     overflow: hidden;
     position: relative;
   }
-  .poster img { position: absolute; max-width: none; image-rendering: auto; }
+  .poster img { position: absolute; max-width: none; }
   .headtext { flex: 1; min-width: 0; }
   h2 {
     font-family: "Noto Serif TC", serif;
     font-weight: 700;
-    font-size: 1.14rem;
-    margin: 0 0 1px;
+    font-size: 22px;
+    margin: 0 0 4px;
     text-wrap: balance;
-    line-height: 1.35;
+    line-height: 1.3;
   }
-  .en { color: var(--faint); font-size: .74rem; letter-spacing: .01em; margin-bottom: 4px; }
-  .meta { color: var(--muted); font-size: .76rem; display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
-  .pill {
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 0 5px;
-    font-size: .7rem;
-    color: var(--muted);
-    white-space: nowrap;
-  }
-  .pill.ev { border-color: var(--event); color: var(--event); background: var(--event-bg); font-weight: 700; }
+  .en { color: var(--ink2); font-size: 12px; margin-bottom: 8px; }
+  .meta { color: var(--ink2); font-size: 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+  /* 分級、片長這些只是文字，不需要每個都裝進框裡 */
+  .pill { color: var(--ink2); white-space: nowrap; }
+  .pill.ev { color: var(--blue); font-weight: 700; }
   .syn {
-    color: var(--muted);
-    font-size: .8rem;
-    margin-top: 6px;
-    line-height: 1.6;
+    color: var(--ink2);
+    font-size: 13px;
+    margin-top: 8px;
+    line-height: 1.7;
+    max-width: 64ch;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -223,142 +212,128 @@
   }
   .syn.open { -webkit-line-clamp: unset; }
 
-  .venues { margin-top: 11px; }
-  .venue { display: flex; gap: 11px; padding: 9px 0; border-top: 1px dashed var(--line); flex-wrap: wrap; align-items: baseline; }
-  .vname { flex: 0 0 176px; font-size: .87rem; font-weight: 500; line-height: 1.4; }
-  .vname .area { color: var(--faint); font-size: .68rem; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; margin-right: 5px; white-space: nowrap; }
-  .times { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; min-width: 0; }
-  .t {
-    display: inline-flex;
+  /* ── 戲院與場次 ───────────────────────────── */
+  .venues { margin-top: 16px; border-top: 1px solid var(--rule); }
+  .venue {
+    display: flex;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
     align-items: baseline;
-    gap: 5px;
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: .84rem;
-    font-weight: 500;
-    border: 1px solid var(--line);
-    background: var(--sunk);
+  }
+  .vname { flex: 0 0 190px; font-size: 14px; font-weight: 500; line-height: 1.45; }
+  /* 地區改成群組標題，不再每家戲院重複掛一次 */
+  .vname .area { display: none; }
+  .times { display: flex; gap: 0 14px; flex-wrap: wrap; flex: 1; min-width: 0; align-items: baseline; }
+  /* 場次時間是文字不是按鈕：二十個框會變成砂礫，純文字才掃得動 */
+  .t {
+    display: inline-block;
+    min-width: 5ch;
+    font-size: 15px;
+    font-weight: 600;
     color: var(--ink);
-    border-radius: 6px;
-    padding: 3px 8px;
+    text-decoration: none;
+    white-space: nowrap;
+    padding: 2px 0;
+  }
+  .t:hover { color: var(--red); text-decoration: underline; text-underline-offset: 3px; }
+  .t .lab { display: none; }
+  .t.ev { color: var(--blue); }
+  .t.past { opacity: .35; font-weight: 500; }
+  /* 版本提到群組層級：同一版本的場次排一列，標籤只出現一次 */
+  .vergroup { display: flex; gap: 12px; align-items: baseline; width: 100%; }
+  .verlabel {
+    flex: 0 0 auto;
+    min-width: 8em;
+    font-size: 11px;
+    color: var(--ink3);
+    letter-spacing: .02em;
+    padding-top: 3px;
+  }
+  .verlabel.ev { color: var(--blue); font-weight: 700; }
+
+  /* 地區群組標題 */
+  .areahead {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink2);
+    letter-spacing: .08em;
+    padding: 14px 0 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .areahead span { color: var(--ink3); font-weight: 400; letter-spacing: 0; }
+
+  .price, .dist {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 11px;
+    color: var(--ink3);
     text-decoration: none;
     white-space: nowrap;
   }
-  .t:hover { border-color: var(--accent); color: var(--accent); }
-  .t .lab { font-family: "Noto Sans TC", sans-serif; font-size: .66rem; color: var(--faint); font-weight: 400; }
-  .t.ev { border-color: var(--event); background: var(--event-bg); }
-  .t.ev .lab { color: var(--event); font-weight: 700; }
-  .t.past { opacity: .38; }
+  a.price:hover { color: var(--red); text-decoration: underline; }
+  .dist { color: var(--blue); }
+  .dist.rough { opacity: .8; }
+  .price.approx::after { content: "＊"; }
 
-  .empty { text-align: center; color: var(--muted); padding: 56px 16px; }
-  .empty b { display: block; font-size: 1.02rem; color: var(--ink); margin-bottom: 6px; }
+  .empty { text-align: center; color: var(--ink2); padding: 60px 16px; }
+  .empty b { display: block; font-size: 17px; color: var(--ink); margin-bottom: 6px; font-family: "Noto Serif TC", serif; }
   .more {
     display: block;
     width: 100%;
-    margin: 4px 0 20px;
+    margin: 4px 0 28px;
     padding: 10px;
-    border: 1px dashed var(--line);
-    border-radius: 10px;
+    border: 0;
+    border-top: 1px solid var(--line);
     background: transparent;
-    color: var(--muted);
+    color: var(--ink2);
     font-family: inherit;
-    font-size: .85rem;
+    font-size: 13px;
     cursor: pointer;
+    text-align: left;
   }
-  .more:hover { border-color: var(--accent); color: var(--accent); }
+  .more:hover { color: var(--red); }
 
-  footer { margin-top: 34px; border-top: 1px solid var(--line); padding-top: 14px; color: var(--faint); font-size: .75rem; }
+  footer { margin-top: 40px; border-top: 2px solid var(--rule); padding-top: 14px; color: var(--ink3); font-size: 12px; line-height: 1.7; }
   footer p { margin: 4px 0; }
-  footer b { color: var(--muted); }
+  footer b { color: var(--ink2); }
 
-  @media (max-width: 620px) {
-    h1 { font-size: 1.5rem; }
+  /* ── 單片模式 ─────────────────────────────── */
+  .titlebtn { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+  .titlebtn:hover { color: var(--red); }
+  .alldays {
+    border: 0;
+    background: none;
+    color: var(--red);
+    padding: 0;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .alldays:hover { text-decoration: underline; }
+  .back { border: 0; background: none; color: var(--ink2); font-family: inherit; font-size: 13px; padding: 0 0 12px; cursor: pointer; }
+  .back:hover { color: var(--red); }
+  .poster.big { flex-basis: 88px; width: 88px; height: 132px; }
+  .poster.big img { transform: scale(1.42); transform-origin: top left; }
+  .hint { color: var(--ink3); font-size: 12px; margin-top: 10px; }
+  .daycard { border-top: 1px solid var(--line); padding-top: 12px; margin-bottom: 20px; }
+  .dayhead { display: flex; align-items: baseline; gap: 10px; padding-bottom: 4px; }
+  .dayhead b { font-size: 16px; font-weight: 700; }
+  .dayhead span { color: var(--ink3); font-size: 12px; }
+
+  @media (max-width: 640px) {
+    body { font-size: 15px; }
+    .wrap { padding: 0 14px 60px; }
+    .controls { margin: 0 -14px; padding: 8px 14px; }
+    h1 { font-size: 26px; }
+    h2 { font-size: 19px; }
     .stats { display: none; }
     .vname { flex-basis: 100%; }
-    .poster { flex-basis: 52px; width: 52px; }
+    .verlabel { min-width: 6em; }
+    .poster { flex-basis: 52px; width: 52px; height: 78px; }
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .card { transition: border-color .15s ease; }
-    .t { transition: border-color .12s ease, color .12s ease; }
-  }
-
-  .dist {
-    display: inline-block;
-    margin-left: 6px;
-    font-size: .7rem;
-    color: var(--event);
-    border: 1px solid var(--event);
-    background: var(--event-bg);
-    border-radius: 4px;
-    padding: 0 5px;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-  }
-  .dist.rough { opacity: .75; border-style: dashed; }
-  .price {
-    display: inline-block;
-    margin-left: 7px;
-    font-size: .7rem;
-    color: var(--muted);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 0 5px;
-    text-decoration: none;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-  }
-  a.price:hover { border-color: var(--accent); color: var(--accent); }
-  .price.approx { border-style: dashed; }
-
-  /* 單片模式 */
-  .titlebtn {
-    font: inherit;
-    color: inherit;
-    background: none;
-    border: 0;
-    padding: 0;
-    text-align: left;
-    cursor: pointer;
-  }
-  .titlebtn:hover { color: var(--accent); }
-  .alldays {
-    border: 1px solid var(--accent);
-    background: none;
-    color: var(--accent);
-    border-radius: 999px;
-    padding: 1px 9px;
-    font-size: .72rem;
-    font-family: inherit;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .alldays:hover { background: var(--accent); color: var(--accent-ink); }
-  .back {
-    border: 0;
-    background: none;
-    color: var(--muted);
-    font-family: inherit;
-    font-size: .84rem;
-    padding: 0 0 10px;
-    cursor: pointer;
-  }
-  .back:hover { color: var(--accent); }
-  .poster.big { flex-basis: 92px; width: 92px; height: 138px; }
-  .poster.big img { transform: scale(1.484); transform-origin: top left; }
-  .hint { color: var(--faint); font-size: .74rem; margin-top: 8px; }
-  .daycard { padding-top: 12px; }
-  .dayhead {
-    display: flex;
-    align-items: baseline;
-    gap: 9px;
-    padding-bottom: 3px;
-  }
-  .dayhead b {
-    font-family: "IBM Plex Mono", ui-monospace, monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: .95rem;
-  }
-  .dayhead span { color: var(--faint); font-size: .74rem; }
 </style>
 
 <div class="wrap">
@@ -367,11 +342,7 @@
       <h1>開演<span class="dot">.</span></h1>
       <span class="sub">全台電影場次，一頁查完</span>
     </div>
-    <div class="stats">
-      <div class="stat"><b>__NSESSION__</b><span>場次</span></div>
-      <div class="stat"><b>__NCINEMA__</b><span>影城</span></div>
-      <div class="stat"><b>__NMOVIE__</b><span>電影</span></div>
-    </div>
+    <div class="stats">全台 <b>__NCINEMA__</b> 家影城・<b>__NMOVIE__</b> 部電影・場次至 <b>__LASTDATE__</b></div>
   </header>
 
   <div class="controls">
@@ -731,6 +702,24 @@ var DATA = __DATA__;
     return C[a[0]][0] < C[b[0]][0] ? -1 : 1;
   }
 
+  // 地區是集合標題，不是每家戲院都掛一次的 metadata——同一區重複幾十次是純視覺噪音。
+  function appendVenues(container, rows) {
+    var byCinema = Array.from(group(rows, 0).entries()).sort(sortVenues);
+    var lastArea = null;
+    byCinema.forEach(function (pair) {
+      var area = C[pair[0]][1] || "其他";
+      // 有定位時是依距離排序，跨區跳來跳去，這時不下地區標題反而更清楚
+      if (!myPos && area !== lastArea) {
+        var n = byCinema.filter(function (p) { return (C[p[0]][1] || "其他") === area; }).length;
+        var h = el("div", "areahead", area);
+        h.appendChild(el("span", null, "　" + n + " 家"));
+        container.appendChild(h);
+        lastArea = area;
+      }
+      container.appendChild(venueRow(C[pair[0]][0], null, pair[1]));
+    });
+  }
+
   function venueRow(label, area, rows) {
     var v = el("div", "venue");
     var n = el("div", "vname");
@@ -743,7 +732,32 @@ var DATA = __DATA__;
     v.appendChild(n);
     var times = el("div", "times");
     rows.sort(function (a, b) { return a[5] - b[5]; });
-    for (var i = 0; i < rows.length; i++) times.appendChild(timeChip(rows[i]));
+
+    // 版本（ATMOS‧數位‧英文版）先前黏在每個場次後面，一家戲院二十場就重複二十次，
+    // 文字量比時間本身還多。改成同版本歸一列、標籤只寫一次。
+    var byVer = new Map();
+    for (var i = 0; i < rows.length; i++) {
+      var key = T[rows[i][4]] || H[rows[i][3]] || "";
+      if (!byVer.has(key)) byVer.set(key, []);
+      byVer.get(key).push(rows[i]);
+    }
+
+    if (byVer.size <= 1) {
+      // 只有一種版本就不必浪費一整欄去標它
+      for (var j = 0; j < rows.length; j++) times.appendChild(timeChip(rows[j]));
+    } else {
+      Array.from(byVer.entries())
+        .sort(function (a, b) { return a[1][0][5] - b[1][0][5]; })
+        .forEach(function (pair) {
+          var g = el("div", "vergroup");
+          var lab = el("div", "verlabel" + (pair[1].some(isEvent) ? " ev" : ""), pair[0] || "一般場");
+          g.appendChild(lab);
+          var tt = el("div", "times");
+          pair[1].forEach(function (r) { tt.appendChild(timeChip(r)); });
+          g.appendChild(tt);
+          times.appendChild(g);
+        });
+    }
     v.appendChild(times);
     return v;
   }
@@ -841,9 +855,7 @@ var DATA = __DATA__;
     card.appendChild(head);
 
     var vs = el("div", "venues");
-    Array.from(group(rows, 0).entries())
-      .sort(sortVenues)
-      .forEach(function (pair) { vs.appendChild(venueRow(C[pair[0]][0], C[pair[0]][1], pair[1])); });
+    appendVenues(vs, rows);
     card.appendChild(vs);
     return card;
   }
@@ -984,9 +996,7 @@ var DATA = __DATA__;
         hd.appendChild(el("span", null, pair[1].length + " 場"));
         card.appendChild(hd);
         var vs2 = el("div", "venues");
-        Array.from(group(pair[1], 0).entries())
-          .sort(sortVenues)
-          .forEach(function (cv) { vs2.appendChild(venueRow(C[cv[0]][0], C[cv[0]][1], cv[1])); });
+        appendVenues(vs2, pair[1]);
         card.appendChild(vs2);
         frag2.appendChild(card);
       });
