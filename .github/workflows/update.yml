@@ -86,6 +86,27 @@ jobs:
         with:
           path: _site
 
+      # 來源掛掉時網站會標示，但你不會知道。有設 secret 才發通知，沒設就靜靜跳過。
+      # 設定方式：repo → Settings → Secrets and variables → Actions → New repository secret
+      #   TELEGRAM_TOKEN / TELEGRAM_CHAT_ID
+      - name: 有來源異常時通知
+        if: always() && env.TG_TOKEN != ''
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          # check_health 把異常寫在 stdout，這裡重跑一次只為了取結論（很快，不打網路）
+          REPORT=$(node check_health.mjs 2>&1 || true)
+          BAD=$(printf '%s\n' "$REPORT" | grep -E '^  (✗|!)' || true)
+          if [ -n "$BAD" ]; then
+            TEXT=$(printf '開演｜本輪有來源異常\n\n%s\n\n%s' "$BAD" "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
+            curl -sS -o /dev/null --max-time 20 \
+              --data-urlencode "chat_id=${TG_CHAT}" \
+              --data-urlencode "text=${TEXT}" \
+              "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" || echo "通知發送失敗，不影響部署"
+          fi
+
   deploy:
     needs: build
     runs-on: ubuntu-latest

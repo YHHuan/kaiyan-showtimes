@@ -159,6 +159,8 @@
     outline-offset: 1px;
   }
 
+  .row-extra { margin-top: 6px; padding-top: 6px; border-top: 1px dotted var(--line); }
+  #more-filters[aria-expanded="true"] { border-color: var(--ink2); color: var(--ink); }
   .summary { color: var(--ink2); font-size: 13px; margin: 16px 0 4px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
   .summary b { color: var(--ink); font-weight: 700; }
   .summary .clear { color: var(--red); cursor: pointer; background: none; border: 0; font-family: inherit; font-size: 13px; padding: 0; }
@@ -349,19 +351,25 @@
 
   <div class="controls">
     <div class="dates" id="dates" role="group" aria-label="日期"></div>
+    <!-- 控制項分兩層：常用的永遠可見，低頻條件收進「更多篩選」。
+         十個同權重的控制項擠在一起時，手機上會佔掉半個畫面，而且每項看起來一樣重要。 -->
     <div class="row2">
       <div class="seg" role="group" aria-label="檢視方式">
         <button id="vMovie" aria-pressed="true">按電影</button>
         <button id="vCinema" aria-pressed="false">按戲院</button>
       </div>
       <select id="area" aria-label="地區"></select>
-      <select id="lang" aria-label="配音語言"></select>
       <select id="sort" aria-label="戲院排序">
         <option value="area">依地區</option>
         <option value="next">最快開演</option>
         <option value="dist">距離最近</option>
         <option value="price">票價最低</option>
       </select>
+      <input class="search" id="q" type="search" placeholder="搜尋片名或戲院…">
+      <button class="toggle" id="more-filters" aria-expanded="false">更多篩選</button>
+    </div>
+    <div class="row2 row-extra" id="extra" hidden>
+      <select id="lang" aria-label="配音語言"></select>
       <select id="slot" aria-label="時段">
         <option value="all">全時段</option>
         <option value="morning">早場 ‹12:00</option>
@@ -369,10 +377,9 @@
         <option value="evening">晚場 17–22</option>
         <option value="late">午夜 22:00›</option>
       </select>
-      <button class="toggle" id="tEvent" aria-pressed="false"><span class="box"></span>只看策展・活動場</button>
+      <button class="toggle" id="tEvent" aria-pressed="false">只看策展・活動場</button>
       <button class="toggle" id="tSoon" aria-pressed="false">顯示已開演場次</button>
-      <button class="toggle" id="tEnd" aria-pressed="false"><span class="box"></span>顯示散場時間</button>
-      <input class="search" id="q" type="search" placeholder="搜尋片名或戲院…">
+      <button class="toggle" id="tEnd" aria-pressed="false">顯示散場時間</button>
       <button class="toggle" id="near" title="用瀏覽器定位，依距離排序戲院">離我最近</button>
       <button class="toggle" id="share" title="複製目前查詢的連結">分享這個查詢</button>
     </div>
@@ -1108,6 +1115,13 @@ var DATA = __DATA__;
     );
   };
 
+  var extraEl = document.getElementById("extra");
+  var moreBtn = document.getElementById("more-filters");
+  function setExtra(open) {
+    extraEl.hidden = !open;
+    moreBtn.setAttribute("aria-expanded", String(open));
+  }
+  moreBtn.onclick = function () { setExtra(extraEl.hidden); };
   document.getElementById("share").onclick = function () {
     var btn = this;
     var url = location.href;
@@ -1142,6 +1156,8 @@ var DATA = __DATA__;
   });
 
   readUrl();
+  // 從網址進來時若已帶進階條件，把面板展開——否則使用者看不出結果為什麼被篩過
+  if (state.lang !== "all" || state.slot !== "all" || state.onlyEvent || state.showPast || state.showEnd) setExtra(true);
   document.getElementById("slot").value = state.slot;
   document.getElementById("lang").value = state.lang;
   document.getElementById("sort").value = state.sort;
