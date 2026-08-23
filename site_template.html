@@ -741,8 +741,26 @@ var DATA = __DATA__;
     byCinema.sort(sortVenues);
 
     var expanded = movieIdx == null || state.expanded[movieIdx];
-    var shown = expanded ? byCinema : byCinema.slice(0, VENUE_PREVIEW);
-    var rest = byCinema.length - shown.length;
+    var shown;
+    if (expanded) {
+      shown = byCinema;
+    } else if (state.sort === "area" && !myPos && state.area === "全部") {
+      // 依地區排序又沒指定地區時，直接取前 6 家會全部落在同一個縣市
+      //（「台中市」筆畫排最前，台北的使用者第一眼全是外縣市）。
+      // 改成每縣市各取兩家，先讓人看到全台分佈，再自己展開想看的區。
+      var perArea = {};
+      shown = byCinema.filter(function (p) {
+        var a = C[p[0]][1] || "其他";
+        perArea[a] = (perArea[a] || 0) + 1;
+        return perArea[a] <= 2;
+      }).slice(0, 10);
+    } else {
+      shown = byCinema.slice(0, VENUE_PREVIEW);
+    }
+    var shownSet = {};
+    shown.forEach(function (p) { shownSet[p[0]] = 1; });
+    var restList = byCinema.filter(function (p) { return !shownSet[p[0]]; });
+    var rest = restList.length;
 
     var lastArea = null;
     shown.forEach(function (pair) {
@@ -761,7 +779,7 @@ var DATA = __DATA__;
     if (rest > 0) {
       // 不只說「還有 N 家」，要說是哪些地區的——使用者才知道值不值得展開
       var byArea = {};
-      byCinema.slice(shown.length).forEach(function (p) {
+      restList.forEach(function (p) {
         var a = C[p[0]][1] || "其他";
         byArea[a] = (byArea[a] || 0) + 1;
       });
