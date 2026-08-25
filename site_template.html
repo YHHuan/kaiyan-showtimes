@@ -266,6 +266,8 @@
   }
   .areahead span { color: var(--ink3); font-weight: 400; letter-spacing: 0; }
 
+  .rowmeta { display: block; font-size: 11px; color: var(--ink3); font-weight: 400; }
+  .transit { color: var(--ink3); }
   .price, .dist {
     display: inline-block;
     margin-left: 8px;
@@ -791,15 +793,24 @@ var DATA = __DATA__;
     }
   }
 
-  function venueRow(label, area, rows) {
+  function venueRow(label, area, rows, movieIdx) {
     var v = el("div", "venue");
     var n = el("div", "vname");
     if (area) n.appendChild(el("span", "area", area));
     n.appendChild(document.createTextNode(label));
-    // 票價：只掛在「按電影」的戲院列上（按戲院檢視時戲院名在卡片標題，價錢放那裡）
-    var pr = rows.length ? PRICE[rows[0][0]] : null;
-    if (pr) n.appendChild(priceTag(pr));
-    if (rows.length) { var dt2 = distTag(rows[0][0]); if (dt2) n.appendChild(dt2); }
+    if (movieIdx != null) {
+      // 按戲院檢視：這一列是一部電影，選片時要看的是分級與片長
+      var mInfo = M[movieIdx], mMeta = META[movieIdx] || {};
+      var bits = [];
+      if (mInfo[2]) bits.push(mInfo[2]);
+      if (mMeta.d) bits.push(mMeta.d + " 分");
+      if (bits.length) n.appendChild(el("span", "rowmeta", bits.join("・")));
+    } else {
+      // 按電影檢視：這一列是一家戲院，要看的是多遠、多少錢
+      var pr = rows.length ? PRICE[rows[0][0]] : null;
+      if (pr) n.appendChild(priceTag(pr));
+      if (rows.length) { var dt2 = distTag(rows[0][0]); if (dt2) n.appendChild(dt2); }
+    }
     v.appendChild(n);
     var times = el("div", "times");
     rows.sort(function (a, b) { return a[5] - b[5]; });
@@ -931,6 +942,10 @@ var DATA = __DATA__;
     return card;
   }
 
+  // 兩種檢視回答的是不同問題，所以突顯的資訊也不同：
+  //   按電影＝我已經想看這部，去哪家、幾點？→ 每列突顯戲院的距離與票價
+  //   按戲院＝我已經決定地點，今晚能看什麼？→ 距離票價提到卡片標題講一次，
+  //           每列改突顯這部片的分級與片長（在固定地點選片時，這才是判準）
   function cinemaCard(ci, rows) {
     var card = el("div", "card");
     var ht = el("div", "headtext");
@@ -939,6 +954,16 @@ var DATA = __DATA__;
     var nm = new Set(rows.map(function (r) { return r[1]; })).size;
     meta1.appendChild(el("span", "pill", C[ci][1] || "—"));
     meta1.appendChild(el("span", null, nm + " 部電影・" + rows.length + " 個場次"));
+    var pr = PRICE[ci];
+    if (pr) meta1.appendChild(priceTag(pr));
+    var dt = distTag(ci);
+    if (dt) meta1.appendChild(dt);
+    var g = GEO[ci];
+    if (g && g[2]) {
+      var tr = el("span", "transit", g[2].length > 40 ? g[2].slice(0, 40) + "…" : g[2]);
+      tr.title = g[2];
+      meta1.appendChild(tr);
+    }
     if (rows.some(isEvent)) meta1.appendChild(el("span", "pill ev", "策展・活動場"));
     ht.appendChild(meta1);
     card.appendChild(ht);
@@ -946,7 +971,7 @@ var DATA = __DATA__;
     var vs = el("div", "venues");
     Array.from(group(rows, 1).entries())
       .sort(function (a, b) { return b[1].length - a[1].length; })
-      .forEach(function (pair) { vs.appendChild(venueRow(M[pair[0]][0], null, pair[1])); });
+      .forEach(function (pair) { vs.appendChild(venueRow(M[pair[0]][0], null, pair[1], pair[0])); });
     card.appendChild(vs);
     return card;
   }
