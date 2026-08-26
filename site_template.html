@@ -216,7 +216,7 @@
 
   /* ── 戲院與場次 ───────────────────────────── */
   .cardtoggle {
-    display: none;
+    display: block;
     width: 100%;
     margin-top: 12px;
     padding: 8px 0;
@@ -359,9 +359,6 @@
   .dayhead b { font-size: 16px; font-weight: 700; }
   .dayhead span { color: var(--ink3); font-size: 12px; }
 
-  @media (max-width: 700px) {
-    .cardtoggle { display: block; }
-  }
   @media (max-width: 640px) {
     body { font-size: 15px; }
     .wrap { padding: 0 14px 60px; }
@@ -487,9 +484,6 @@ var DATA = __DATA__;
     var nEl = document.getElementById("notice");
     if (nEl) { nEl.textContent = NOTICE + " "; nEl.style.color = "var(--accent)"; }
   }
-
-  // 窄螢幕的判斷只在載入時做一次，避免轉向或縮放時把使用者展開的卡片重新收起來
-  var NARROW = window.matchMedia("(max-width: 700px)").matches;
 
   var CELL_W = 62, CELL_H = 93;
   // 正片前的廣告與預告，各家約 10-15 分鐘；散場時間是估算，不是官方數字
@@ -993,9 +987,9 @@ var DATA = __DATA__;
     head.appendChild(ht);
     card.appendChild(head);
 
-    // 手機上一部熱門片攤開就是好幾個螢幕，滑到一半已經忘記在看哪部。
-    // 窄螢幕預設收起，第一頁只看得到片單；桌機空間夠，維持展開。
-    var open = state.openCards[mi] != null ? state.openCards[mi] : !NARROW;
+    // 一律預設收起——桌機攤開一樣是好幾個螢幕，第一頁應該先讓人看到「有哪些片」。
+    // 展開狀態記在 state 裡，同一次瀏覽中不會因為改篩選就被收回去。
+    var open = !!state.openCards[mi];
     var vs = el("div", "venues");
     if (open) appendVenues(vs, rows, mi);
 
