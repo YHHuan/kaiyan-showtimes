@@ -29,6 +29,7 @@ for (const c of payload.Data.CinemaGroup || []) {
             date,
             time: s.ShowTime,
             hall: hallGroup.MovieHallCht || null,
+            seats: s.AvailableSeats != null ? Number(s.AvailableSeats) : null,
             // Rate 是分級（PG-15/G/P），不是影廳規格——放進 tags 會在場次上顯示成版本標籤
             rating: mv.Rate || null,
             tags: [],

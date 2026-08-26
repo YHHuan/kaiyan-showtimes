@@ -136,6 +136,29 @@ const tags = intern();
 const urls = intern();
 const dates = intern();
 
+// ── 剩餘座位 ────────────────────────────────────────────
+// 新光／美麗新／in89 的來源有給剩餘席次。但「剩 44 席」本身無法判讀——
+// 44 席在小廳是客滿邊緣、在大廳是空的。in89 有給總席次，另外兩家沒有，
+// 所以用「同一影廳出現過的最大餘位」當容量估計（開賣初期的場次通常接近滿座）。
+const hallCap = new Map();
+for (const r of merged) {
+  if (typeof r.seats !== 'number') continue;
+  const key = `${r.cinema}|${r.hall || ''}`;
+  const cap = typeof r.total === 'number' ? r.total : r.seats;
+  hallCap.set(key, Math.max(hallCap.get(key) || 0, cap));
+}
+
+// 只分三段。精確數字會讓人以為是即時的，但這是抓取當下的快照。
+function seatLevel(r) {
+  if (typeof r.seats !== 'number') return null;
+  const cap = hallCap.get(`${r.cinema}|${r.hall || ''}`);
+  if (!cap || cap < 10) return null;          // 樣本太少，估不準就不要標
+  const ratio = r.seats / cap;
+  if (ratio >= 0.5) return 1;                  // 空位多
+  if (ratio >= 0.15) return 2;                 // 剩一些
+  return 3;                                    // 快滿了
+}
+
 // 特別場歸戶：「蜘蛛人：重生日 經典美漫場」併回「蜘蛛人：重生日」，場次名稱降級成標記。
 // 只在「本片確實也單獨存在」時才併，避免把真的叫「…場」的片名切壞。
 const allKeys = new Set(merged.map((r) => matchKey(r.movie)));
@@ -232,13 +255,24 @@ for (const r of merged) {
     tags.id((r.tags || []).filter(Boolean).join('・') || null),
   ];
   const k = key.join(',');
-  if (!groups.has(k)) groups.set(k, { key, times: [] });
+  if (!groups.has(k)) groups.set(k, { key, times: [], seats: [] });
   groups.get(k).times.push(Number(r.time.slice(0, 2)) * 60 + Number(r.time.slice(3, 5)));
+  groups.get(k).seats.push(seatLevel(r) || 0);
 }
 
 const b36 = (n) => n.toString(36);
+// 時間與座位等級要對齊，所以先一起排序再各自輸出（去重以時間為準）
 const packed = [...groups.values()]
-  .map((g) => g.key.map(b36).join(',') + ',' + [...new Set(g.times)].sort((a, b) => a - b).map(b36).join('.'))
+  .map((g) => {
+    const seen = new Set();
+    const pairs = g.times
+      .map((t, i) => [t, g.seats[i]])
+      .filter(([t]) => (seen.has(t) ? false : (seen.add(t), true)))
+      .sort((a, b) => a[0] - b[0]);
+    const times = pairs.map(([t]) => b36(t)).join('.');
+    const seats = pairs.map(([, s]) => s).join('');
+    return g.key.map(b36).join(',') + ',' + times + (seats.replace(/0/g, '') ? ',' + seats : '');
+  })
   .join(';');
 const rows = merged; // 只用來計數
 

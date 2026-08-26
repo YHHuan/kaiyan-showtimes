@@ -215,6 +215,20 @@
   .syn.open { -webkit-line-clamp: unset; }
 
   /* ── 戲院與場次 ───────────────────────────── */
+  .cardtoggle {
+    display: none;
+    width: 100%;
+    margin-top: 12px;
+    padding: 8px 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    background: transparent;
+    color: var(--red);
+    font-family: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
   .venues { margin-top: 16px; border-top: 1px solid var(--rule); }
   .venue {
     display: flex;
@@ -239,7 +253,10 @@
     white-space: nowrap;
     padding: 2px 0;
   }
-  .t:hover { color: var(--red); text-decoration: underline; text-underline-offset: 3px; }
+  .t { cursor: default; }
+  .vlink { color: inherit; text-decoration: none; border-bottom: 1px solid var(--line); }
+  .vlink:hover { color: var(--red); border-bottom-color: var(--red); }
+  .vlink::after { content: " ↗"; font-size: .8em; color: var(--ink3); }
   .t .lab { display: none; }
   .t.ev { color: var(--blue); }
   .t.past { opacity: .35; font-weight: 500; }
@@ -266,6 +283,19 @@
   }
   .areahead span { color: var(--ink3); font-weight: 400; letter-spacing: 0; }
 
+  /* 座位狀態：只分三段，因為這是抓取當下的快照不是即時 */
+  .seat {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-left: 5px;
+    vertical-align: 1px;
+  }
+  .seat.s1 { background: #3E8E5A; }
+  .seat.s2 { background: #C88A2A; }
+  .seat.s3 { background: var(--red); }
+  .t.past .seat { opacity: .4; }
   .rowmeta { display: block; font-size: 11px; color: var(--ink3); font-weight: 400; }
   .transit { color: var(--ink3); }
   .price, .dist {
@@ -329,6 +359,9 @@
   .dayhead b { font-size: 16px; font-weight: 700; }
   .dayhead span { color: var(--ink3); font-size: 12px; }
 
+  @media (max-width: 700px) {
+    .cardtoggle { display: block; }
+  }
   @media (max-width: 640px) {
     body { font-size: 15px; }
     .wrap { padding: 0 14px 60px; }
@@ -399,6 +432,9 @@
     <p>場次更新於 <b>__GENERATED__</b>，每日自動重抓。<span id="notice"></span>
       實際場次與票種以各影城官方公告為準；威秀影城因全站機器人防護尚未納入。</p>
     <p>散場時間為估算（片長＋約 12 分鐘廣告），僅供參考。</p>
+    <p>座位色點：<span class="seat s1"></span> 空位多　<span class="seat s2"></span> 剩一些　<span class="seat s3"></span> 快滿了。
+      只有新光、美麗新、in89 的來源提供席次，而且是<b>抓取當下</b>的快照、不是即時，
+      實際餘位以訂票頁為準。</p>
   </footer>
 </div>
 
@@ -452,6 +488,9 @@ var DATA = __DATA__;
     if (nEl) { nEl.textContent = NOTICE + " "; nEl.style.color = "var(--accent)"; }
   }
 
+  // 窄螢幕的判斷只在載入時做一次，避免轉向或縮放時把使用者展開的卡片重新收起來
+  var NARROW = window.matchMedia("(max-width: 700px)").matches;
+
   var CELL_W = 62, CELL_H = 93;
   // 正片前的廣告與預告，各家約 10-15 分鐘；散場時間是估算，不是官方數字
   var ADS = 12;
@@ -468,8 +507,9 @@ var DATA = __DATA__;
       var ci = parseInt(f[0], 36), mi = parseInt(f[1], 36), di = parseInt(f[2], 36);
       var hi = parseInt(f[3], 36), ti = parseInt(f[4], 36);
       var times = f[5].split(".");
+      var seats = f[6] || "";   // 每個場次一個字元的座位等級，沒有這欄代表該來源沒給
       for (var j = 0; j < times.length; j++) {
-        out.push([ci, mi, di, hi, ti, parseInt(times[j], 36)]);
+        out.push([ci, mi, di, hi, ti, parseInt(times[j], 36), +(seats.charAt(j) || 0)]);
       }
     }
     return out;
@@ -477,7 +517,7 @@ var DATA = __DATA__;
 
   var TAG_LANG = T.map(langOf); // 標籤索引 → 語言，先算好避免每次篩選重跑正規表達式
 
-  // 索引：0=戲院 1=電影 2=日期 3=廳 4=標籤 5=分鐘數
+  // 索引：0=戲院 1=電影 2=日期 3=廳 4=標籤 5=分鐘數 6=座位等級(0無資料/1空/2剩一些/3快滿)
   function isEvent(r) { var t = T[r[4]]; return !!t && EVENT_RE.test(t); }
   function hhmm(m) { return p2(Math.floor(m / 60)) + ":" + p2(m % 60); }
   // 訂票連結是每家戲院一個樣板；{d}=2026-08-21、{s}=2026%2F08%2F21（國賓那種帶查詢日期的）
@@ -500,7 +540,8 @@ var DATA = __DATA__;
     slot: "all",
     lang: "all",
     sort: "area",
-    expanded: {},   // 哪幾部片的戲院清單已展開
+    expanded: {},   // 哪幾部片的戲院清單已展開（「另有 N 家」那層）
+    openCards: {},  // 哪幾部片的場次區塊是打開的（手機預設全收）
     onlyEvent: false,
     showPast: false,   // 預設隱藏今天已開演的場次——全部列出再變灰對決策沒幫助
     showEnd: store.get("showEnd", "0") === "1",
@@ -694,10 +735,9 @@ var DATA = __DATA__;
   }
 
   function timeChip(r) {
-    var a = el("a", "t");
-    a.href = bookUrl(r);
-    a.target = "_blank";
-    a.rel = "noopener";
+    // 場次本身不再是連結。多數影城的連結只到「選場次」主頁，點進去還要重選一次，
+    // 二十個假的可點方塊只是噪音——訂票入口統一放在戲院名稱上。
+    var a = el("span", "t");
     var md = META[r[1]];
     var endM = md && md.d ? (r[5] + md.d + ADS) % 1440 : null;
     a.appendChild(document.createTextNode(
@@ -705,6 +745,11 @@ var DATA = __DATA__;
     ));
     var lab = T[r[4]] || H[r[3]];
     if (lab) a.appendChild(el("span", "lab", lab));
+    if (r[6]) {
+      var dot = el("span", "seat s" + r[6]);
+      dot.setAttribute("aria-label", ["", "空位多", "剩一些", "快滿了"][r[6]]);
+      a.appendChild(dot);
+    }
     if (isEvent(r)) a.className = "t ev";
     if (D[r[2]] === NOW.date && r[5] < NOW.mins) a.className += " past";
     var hall = H[r[3]];
@@ -797,7 +842,19 @@ var DATA = __DATA__;
     var v = el("div", "venue");
     var n = el("div", "vname");
     if (area) n.appendChild(el("span", "area", area));
-    n.appendChild(document.createTextNode(label));
+    // 訂票連結掛在這裡：一家戲院一個入口，而不是每個場次都假裝可以直接買
+    if (movieIdx == null && rows.length) {
+      var link = document.createElement("a");
+      link.className = "vlink";
+      link.href = bookUrl(rows[0]);
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = label;
+      link.title = "前往 " + label + " 訂票";
+      n.appendChild(link);
+    } else {
+      n.appendChild(document.createTextNode(label));
+    }
     if (movieIdx != null) {
       // 按戲院檢視：這一列是一部電影，選片時要看的是分級與片長
       var mInfo = M[movieIdx], mMeta = META[movieIdx] || {};
@@ -936,8 +993,17 @@ var DATA = __DATA__;
     head.appendChild(ht);
     card.appendChild(head);
 
+    // 手機上一部熱門片攤開就是好幾個螢幕，滑到一半已經忘記在看哪部。
+    // 窄螢幕預設收起，第一頁只看得到片單；桌機空間夠，維持展開。
+    var open = state.openCards[mi] != null ? state.openCards[mi] : !NARROW;
     var vs = el("div", "venues");
-    appendVenues(vs, rows, mi);
+    if (open) appendVenues(vs, rows, mi);
+
+    var nc = new Set(rows.map(function (r) { return r[0]; })).size;
+    var toggle = el("button", "cardtoggle", open ? "收起場次" : "看 " + nc + " 家戲院的 " + rows.length + " 個場次");
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.onclick = function () { state.openCards[mi] = !open; render(); };
+    card.appendChild(toggle);
     card.appendChild(vs);
     return card;
   }

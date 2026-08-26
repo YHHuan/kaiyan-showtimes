@@ -55,6 +55,8 @@ const records = await withPage(async (page) => {
         date: (s.BusinessDate || s.ShowDate).replace(/\//g, '-'),
         time: (s.ShowTime || '').slice(0, 5),
         hall: s.ScreenName || null,
+        // 剩餘座位：站方本來就給了，先前解析時丟掉。用來標示「還很空／快滿了」
+        seats: typeof s.SeatsAvailable === 'number' ? s.SeatsAvailable : null,
         tags: [s.FilmType || film.FilmType].filter(Boolean),
         url: `https://www.skcinemas.com/sessions?c=${c.id}`,
       });

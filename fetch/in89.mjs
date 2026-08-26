@@ -48,7 +48,14 @@ const records = await withPage(async (page) => {
             const field = a.getAttribute('data-field');
             if (!field) continue;
             const hall = info.querySelector('.time-array div');
-            rows.push({ title, en, format, rating, field, hall: hall ? hall.textContent.trim() : null });
+            // 頁面把餘位與總位寫成兩個連結：「40(餘)」「40(總)」
+            var seats = null, total = null;
+            info.querySelectorAll('.time-array a').forEach(function (x) {
+              var m = (x.textContent || '').match(/(\d+)\s*\((餘|總)\)/);
+              if (!m) return;
+              if (m[2] === '餘') seats = Number(m[1]); else total = Number(m[1]);
+            });
+            rows.push({ title, en, format, rating, field, hall: hall ? hall.textContent.trim() : null, seats: seats, total: total });
           }
         }
         return { label: label ? label.textContent.trim().slice(0, 10) : null, rows };
@@ -68,6 +75,8 @@ const records = await withPage(async (page) => {
           date,
           time: (time || '').slice(0, 5),
           hall: r.hall,
+          seats: r.seats,
+          total: r.total,
           tags: r.format ? [r.format] : [],
           url: `https://www.in89cinemax.com/film_list.aspx?TheaterId=${th.id}`,
         });
