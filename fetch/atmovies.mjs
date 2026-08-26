@@ -65,27 +65,31 @@ const ARTHOUSE = {
 // <a href="/showtime/{code}/{region}/" onMouseOver="...戲院時間表">「網站」超連結
 // 均指向 https://www.vscinemas.com.tw/，確認是威秀集團官方分館（MUVIE 亦屬同集團）。
 // 開眼「嘉義」地區（a05）目前沒有威秀分館，故不列——依開眼實際列出的為準，不用猜的。
+// official 用的是「線上訂票系統」而不是「場次查詢」——使用者回報點場次查詢進去
+// 還要再選一次。威秀官網導覽列自己同時有這兩個連結，我們原本取到的是查詢那個。
+// 該站有 Akamai 擋爬，網址是從 Wayback 存檔（2026-08-21 首頁、2026-06-11 訂票頁）
+// 查證的：頁面標題「威秀影城線上訂票系統」、含 22 家分館的選單。
 const VIESHOW = {
-  t02a01: { name: '台北信義威秀', area: '台北市', region: 'a02', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t02a11: { name: 'MUVIE CINEMAS台北松仁威秀', area: '台北市', region: 'a02', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t02a12: { name: '台北南港LaLaport威秀影城', area: '台北市', region: 'a02', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t02b14: { name: '台北京站威秀', area: '台北市', region: 'a02', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t02b08: { name: '台北西門威秀影城', area: '台北市', region: 'a02', official: 'http://www.vscinemas.com.tw/ShowTimes/' },
-  t02e07: { name: '板橋大遠百威秀影城', area: '新北市', region: 'a02', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t02e12: { name: '林口三井OUTLET威秀影城', area: '新北市', region: 'a02', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t02e20: { name: '中和環球威秀影城', area: '新北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsweb/theater/detail.aspx?id=25' },
-  t02e21: { name: '新店裕隆城威秀影城', area: '新北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsweb/theater/detail.aspx?id=28' },
-  t03308: { name: '桃園統領威秀影城', area: '桃園市', region: 'a03', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t03317: { name: '桃園桃知道威秀影城', area: '桃園市', region: 'a03', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t03505: { name: '新竹大遠百威秀影城', area: '新竹市', region: 'a35', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t03508: { name: '新竹巨城威秀影城', area: '新竹市', region: 'a35', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t04402: { name: '台中老虎城威秀', area: '台中市', region: 'a04', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t04407: { name: '台中大遠百威秀影城', area: '台中市', region: 'a04', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t04409: { name: '台中iFG遠雄廣場威秀影城', area: '台中市', region: 'a04', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t06609: { name: '台南大遠百威秀影城', area: '台南市', region: 'a06', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t06610: { name: '台南南紡威秀影城', area: '台南市', region: 'a06', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t06611: { name: '台南FOCUS威秀影城', area: '台南市', region: 'a06', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
-  t07703: { name: '高雄大遠百威秀影城', area: '高雄市', region: 'a07', official: 'https://www.vscinemas.com.tw/ShowTimes/' },
+  t02a01: { name: '台北信義威秀', area: '台北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t02a11: { name: 'MUVIE CINEMAS台北松仁威秀', area: '台北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t02a12: { name: '台北南港LaLaport威秀影城', area: '台北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t02b14: { name: '台北京站威秀', area: '台北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t02b08: { name: '台北西門威秀影城', area: '台北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t02e07: { name: '板橋大遠百威秀影城', area: '新北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t02e12: { name: '林口三井OUTLET威秀影城', area: '新北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t02e20: { name: '中和環球威秀影城', area: '新北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t02e21: { name: '新店裕隆城威秀影城', area: '新北市', region: 'a02', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t03308: { name: '桃園統領威秀影城', area: '桃園市', region: 'a03', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t03317: { name: '桃園桃知道威秀影城', area: '桃園市', region: 'a03', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t03505: { name: '新竹大遠百威秀影城', area: '新竹市', region: 'a35', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t03508: { name: '新竹巨城威秀影城', area: '新竹市', region: 'a35', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t04402: { name: '台中老虎城威秀', area: '台中市', region: 'a04', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t04407: { name: '台中大遠百威秀影城', area: '台中市', region: 'a04', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t04409: { name: '台中iFG遠雄廣場威秀影城', area: '台中市', region: 'a04', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t06609: { name: '台南大遠百威秀影城', area: '台南市', region: 'a06', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t06610: { name: '台南南紡威秀影城', area: '台南市', region: 'a06', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t06611: { name: '台南FOCUS威秀影城', area: '台南市', region: 'a06', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
+  t07703: { name: '高雄大遠百威秀影城', area: '高雄市', region: 'a07', official: 'https://www.vscinemas.com.tw/vsTicketing/ticketing/ticket.aspx' },
 };
 
 // 新光影城（skcinemas.com，5 館）：官方來源 fetch/skcinemas.mjs 本機抓得到，但雲端 CI
