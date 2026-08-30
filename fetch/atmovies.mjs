@@ -1,7 +1,8 @@
 // 開眼電影網（atmovies.com.tw）：補洞來源，用來抓「其他來源涵蓋不到」的獨立／藝文／
 // 二輪戲院場次（例如誠品電影院、光點台北：官網不是圖片就是 JS 動態渲染，curl 抓不到），
 // 以及兩個完全沒有官方資料可用的連鎖：威秀／MUVIE（全站 Akamai 擋爬蟲，無頭瀏覽器也 403）、
-// 新光（本機抓得到，但 GitHub Actions 雲端 IP 連 TCP 都被擋，10 次全逾時）。
+// 新光（本機抓得到，但 GitHub Actions 雲端 IP 連 TCP 都被擋，10 次全逾時），以及
+// 美麗新（官方站會拒絕 GitHub Actions 雲端 IP）。
 //
 // 開眼本身是 server-rendered HTML，好抓，但限制是場次頁只顯示「當天」，沒有日期參數可翻頁
 // （實測 /showtime/{code}/a02/ 不吃 date query，也沒找到任何翻頁連結），所以本檔只產出今天一天。
@@ -10,12 +11,11 @@
 //   - 光點華山電影館、府中15：已有 fetch/arthouse.mjs 直接抓官網（spot-hs.org.tw /
 //     fuzhong15.ntpc.gov.tw），資料更完整（多天、真廳別），這裡刻意不重複收，避免同一場次
 //     用不同 hall/tags 值在合併後被當成兩筆不同紀錄。
-//   - 秀泰、國賓、美麗新/美麗華、喜樂時代、in89、樂聲：這些連鎖已有其他 fetch/*.mjs 涵蓋
+//   - 秀泰、國賓、美麗華、喜樂時代、in89、樂聲：這些連鎖已有其他 fetch/*.mjs 涵蓋
 //     官方資料，不用開眼補。
 //   - 威秀／MUVIE：我們從來沒有官方資料，這裡無條件抓（見下方 VIESHOW）。
-//   - 新光：官方來源（fetch/skcinemas.mjs）本機抓得到，只在它抓失敗／資料過期時才用開眼
-//     頂替，避免同一館兩份不同命名/來源的資料重複上架（見下方 SKCINEMAS_BACKUP 與
-//     shouldUseSkcinemasBackup()）。
+//   - 新光、美麗新：官方來源本機抓得到，只在它抓失敗／資料過期時才用開眼頂替，避免
+//     同一館兩份不同命名/來源的資料重複上架（見下方備援設定與 shouldUseSourceBackup()）。
 //
 // 編碼：伺服器回應 Content-Type: text/html;charset=UTF-8，且動態內容（片名/場次）本身
 // 就是合法 UTF-8；只有頁面最上方少數寫死的 <meta name="author"/"copyright"> 樣板字串是舊站
@@ -108,10 +108,16 @@ const SKCINEMAS_BACKUP = {
   t06607: { name: '台南新光影城', area: '台南市', region: 'a06', official: 'https://www.skcinemas.com/sessions' },
 };
 
-// 新光要不要啟用開眼備援：讀 data/_status.json，沒有 skcinemas 這個鍵，或它的
-// fetchedAt 距今超過 26 小時，就視為「官方抓取失敗／過期」，啟用備援；否則跳過
-// （官方資料還新鮮，不要讓同一館出現兩份來源、命名都不同的重複紀錄）。
-async function shouldUseSkcinemasBackup() {
+// 美麗新官方來源在本機可取得多天資料，但 GitHub Actions 雲端 IP 偶爾會收到 403。
+// 代碼來自開眼台北、桃園地區頁；名稱刻意和 fetch/miranew.mjs 一致，讓收藏與篩選穩定。
+const MIRANEW_BACKUP = {
+  t02d06: { name: '台北大直美麗新皇家影城', area: '台北市', region: 'a02', official: 'https://www.miranewcinemas.com/booking/timetable' },
+  t03301: { name: '桃園台茂美麗新影城', area: '桃園市', region: 'a03', official: 'https://www.miranewcinemas.com/booking/timetable' },
+};
+
+// 是否啟用開眼備援：讀 data/_status.json；來源缺席、筆數太少，或 fetchedAt 距今超過
+// 26 小時，就視為官方抓取失敗／過期。官方資料還新鮮時略過，避免同一館出現兩份資料。
+async function shouldUseSourceBackup(source, minCount) {
   const statusPath = new URL('../data/_status.json', import.meta.url).pathname;
   let status;
   try {
@@ -119,21 +125,27 @@ async function shouldUseSkcinemasBackup() {
   } catch {
     return true; // 讀不到狀態檔，視同官方來源缺席
   }
-  const sk = status.skcinemas;
-  if (!sk?.fetchedAt) return true;
+  const current = status[source];
+  if (!current?.fetchedAt) return true;
   // 光看時間戳不夠：抓取失敗時仍會寫入一筆 count 為 0、時間卻很新的狀態，
   // 只檢查新鮮度會誤以為官方資料好好的，備援因此不啟動（CI 上實際發生過）。
-  if (!(sk.count > 300)) return true;
-  const ageHours = (Date.now() - new Date(sk.fetchedAt).getTime()) / 3600000;
+  if (!(current.count > minCount)) return true;
+  const ageHours = (Date.now() - new Date(current.fetchedAt).getTime()) / 3600000;
   return !(ageHours <= 26);
 }
 
 const CINEMAS = { ...ARTHOUSE, ...VIESHOW };
-if (await shouldUseSkcinemasBackup()) {
+if (await shouldUseSourceBackup('skcinemas', 300)) {
   Object.assign(CINEMAS, SKCINEMAS_BACKUP);
   console.log('  [新光] 官方來源缺席、過期或抓取失敗，啟用開眼備援');
 } else {
   console.log('  [新光] 官方來源新鮮，略過開眼備援，避免重複');
+}
+if (await shouldUseSourceBackup('miranew', 100)) {
+  Object.assign(CINEMAS, MIRANEW_BACKUP);
+  console.log('  [美麗新] 官方來源缺席、過期或抓取失敗，啟用開眼備援');
+} else {
+  console.log('  [美麗新] 官方來源新鮮，略過開眼備援，避免重複');
 }
 
 // 分級圖示代碼 → 中文級別。開眼用 <img src="/images/cer_X.gif"> 標示分級，沒有 alt 文字，

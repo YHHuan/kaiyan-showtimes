@@ -4,8 +4,8 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-# atmovies 必須排在 skcinemas 之後：它會看 _status.json 決定要不要啟用新光的備援，
-# 跑在前面就只看得到上一輪的狀態，這一輪新光掛掉也不會補。
+# atmovies 必須排在 skcinemas、miranew 之後：它會看 _status.json 決定要不要啟用備援，
+# 跑在前面就只看得到上一輪的狀態，這一輪來源掛掉也不會補。
 HTTP_FETCHERS=(showtimes ambassador centuryasia miranew lux arthouse arthouse2 prices cinemas geocode_fill)
 BROWSER_FETCHERS=(skcinemas in89)   # 需要 playwright，較慢，序列跑避免同時開太多瀏覽器
 LAST_FETCHERS=(atmovies)
