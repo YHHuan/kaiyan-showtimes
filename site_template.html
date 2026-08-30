@@ -1,8 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>開演</title>
+<title>開演｜全台電影場次、未來檔期與策展放映</title>
+<meta name="description" content="不用安裝 App，跨影城查今天、週末與未來電影場次；可依地區、時間、距離、票價、語言與影廳格式篩選，並收錄藝文館策展與特別放映。">
+<meta name="theme-color" content="#F3F0E8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171613" media="(prefers-color-scheme: dark)">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'sha256-__SCRIPT_HASH__'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; worker-src 'self'; manifest-src 'self'; upgrade-insecure-requests">
+<link rel="canonical" href="__SITE_URL__/">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="zh_TW">
+<meta property="og:site_name" content="開演">
+<meta property="og:title" content="開演｜幫你決定哪一場最適合">
+<meta property="og:description" content="跨影城查未來場次、策展放映、距離、票價、語言與影廳格式；不用安裝 App。">
+<meta property="og:url" content="__SITE_URL__/">
+<meta name="twitter:card" content="summary">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="manifest" href="manifest.webmanifest">
 <style>
   /* 「開演」的視覺立場：這不是 SaaS 儀表板，也不是海報藝廊，是一份為今晚做決定
      而編排的當代影劇版。所以——紙色不是冷灰、用線不用卡、用基線不用陰影。
@@ -63,6 +79,11 @@
      那會讓中文也被拉成資料介面的語氣。 */
   body { font-variant-numeric: tabular-nums; }
   .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px 80px; }
+  .skip {
+    position: fixed; left: 12px; top: -60px; z-index: 100;
+    background: var(--ink); color: var(--sheet); padding: 8px 12px;
+  }
+  .skip:focus { top: 12px; }
 
   /* ── 報頭 ────────────────────────────────── */
   header {
@@ -164,6 +185,38 @@
   .summary { color: var(--ink2); font-size: 13px; margin: 16px 0 4px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
   .summary b { color: var(--ink); font-weight: 700; }
   .summary .clear { color: var(--red); cursor: pointer; background: none; border: 0; font-family: inherit; font-size: 13px; padding: 0; }
+
+  .planner {
+    display: flex; gap: 8px 14px; align-items: end; flex-wrap: wrap;
+    margin-top: 8px; padding: 10px 0 2px; border-top: 1px dotted var(--line);
+  }
+  .planner[hidden] { display: none; }
+  .planner label { color: var(--ink3); font-size: 11px; display: grid; gap: 2px; }
+  .planner input { border: 1px solid var(--line); background: var(--sheet); color: var(--ink); border-radius: 3px; padding: 4px 7px; font: inherit; font-size: 13px; }
+  .planner .planhint { flex: 1 1 210px; color: var(--ink3); font-size: 11px; padding-bottom: 3px; }
+
+  .favbtn, .calbtn, .installbtn {
+    border: 1px solid var(--line); background: transparent; color: var(--ink2);
+    border-radius: 3px; padding: 3px 8px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .favbtn[aria-pressed="true"] { color: var(--red); border-color: var(--red); background: var(--red-bg); }
+  .movie-links { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 9px; font-size: 12px; }
+  .movie-links a { color: var(--blue); text-decoration: none; border-bottom: 1px solid var(--line); }
+  .movie-links a:hover { border-bottom-color: var(--blue); }
+
+  .planlist { border-top: 2px solid var(--rule); margin-top: 6px; }
+  .planrow {
+    display: grid; grid-template-columns: 105px minmax(0, 1fr) auto;
+    gap: 14px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line);
+  }
+  .plantime { font-size: 18px; font-weight: 700; line-height: 1.25; }
+  .plantime small { display: block; color: var(--ink3); font-size: 10px; font-weight: 400; }
+  .planmain { min-width: 0; }
+  .planmovie { font-family: "Noto Serif TC", "PMingLiU", serif; font-size: 17px; font-weight: 700; }
+  .planvenue { color: var(--ink2); font-size: 12px; margin-top: 2px; }
+  .plandetail { color: var(--ink3); font-size: 11px; margin-top: 2px; }
+  .planactions { display: flex; gap: 6px; align-items: center; }
+  .bookbtn { color: var(--red); text-decoration: none; font-size: 12px; white-space: nowrap; }
 
   /* ── 電影段落：連續版面，不是一疊卡片 ───────────── */
   .card {
@@ -369,8 +422,15 @@
     .vname { flex-basis: 100%; }
     .verlabel { min-width: 6em; }
     .poster { flex-basis: 52px; width: 52px; height: 78px; }
+    .planrow { grid-template-columns: 82px minmax(0, 1fr); gap: 9px; }
+    .planactions { grid-column: 2; }
+    .plantime { font-size: 16px; }
   }
 </style>
+</head>
+<body>
+
+<a class="skip" href="#list">跳到場次結果</a>
 
 <div class="wrap">
   <header>
@@ -389,6 +449,7 @@
       <div class="seg" role="group" aria-label="檢視方式">
         <button id="vMovie" aria-pressed="true">按電影</button>
         <button id="vCinema" aria-pressed="false">按戲院</button>
+        <button id="vPlan" aria-pressed="false">幫我排</button>
       </div>
       <select id="area" aria-label="地區"></select>
       <select id="sort" aria-label="戲院排序">
@@ -402,6 +463,7 @@
     </div>
     <div class="row2 row-extra" id="extra" hidden>
       <select id="lang" aria-label="配音語言"></select>
+      <select id="format" aria-label="影廳格式"></select>
       <select id="slot" aria-label="時段">
         <option value="all">全時段</option>
         <option value="morning">早場 ‹12:00</option>
@@ -410,15 +472,28 @@
         <option value="late">午夜 22:00›</option>
       </select>
       <button class="toggle" id="tEvent" aria-pressed="false">只看策展・活動場</button>
+      <button class="toggle" id="tFav" aria-pressed="false">只看收藏</button>
       <button class="toggle" id="tSoon" aria-pressed="false">顯示已開演場次</button>
       <button class="toggle" id="tEnd" aria-pressed="false">顯示散場時間</button>
       <button class="toggle" id="near" title="用瀏覽器定位，依距離排序戲院">離我最近</button>
       <button class="toggle" id="share" title="複製目前查詢的連結">分享這個查詢</button>
+      <button class="installbtn" id="install" hidden>安裝到手機</button>
+    </div>
+    <div class="planner" id="planner" hidden>
+      <label>最早開演<input id="planStart" type="time" value="18:00" step="900"></label>
+      <label>最晚散場<input id="planEnd" type="time" value="23:59" step="900"></label>
+      <label>全票起價上限
+        <select id="maxPrice"><option value="all">不限</option><option value="300">$300</option><option value="350">$350</option><option value="400">$400</option></select>
+      </label>
+      <label>距離上限
+        <select id="maxDist"><option value="all">不限</option><option value="3">3 公里</option><option value="5">5 公里</option><option value="10">10 公里</option><option value="20">20 公里</option></select>
+      </label>
+      <div class="planhint">依開演時間排列；有片長時會排除超過最晚散場的場次。距離只在你的瀏覽器計算。</div>
     </div>
   </div>
 
   <div class="summary" id="summary"></div>
-  <div id="list"></div>
+  <main id="list" tabindex="-1"></main>
 
   <footer>
     <p>資料來源：<b>__SOURCES__</b> 各家官方公開場次頁／API。本站只顯示場次時刻，
@@ -475,6 +550,26 @@ var DATA = __DATA__;
     return null;
   }
 
+  // 使用者真正會拿來選場次的特殊影廳。來源標法不一，所以保留原標籤、只做寬鬆歸類；
+  // 一般「數位／2D」不列，否則篩選器只會多一個幾乎等同全部的選項。
+  var FORMAT_RULES = [
+    ["IMAX", /IMAX/i],
+    ["Dolby Cinema", /DOLBY\s*CINEMA/i],
+    ["Dolby Atmos", /ATMOS/i],
+    ["4DX", /4DX/i],
+    ["MX4D", /MX4D/i],
+    ["ScreenX", /SCREEN\s*X/i],
+    ["3D", /(^|[^A-Z0-9])3D([^A-Z0-9]|$)/i],
+    ["其他特殊廳", /TITAN|LUXE|B\.O\.X|OSIM|巨幕|尊榮|皇家|柏晶|金鑽/i]
+  ];
+
+  function formatOf(tag, hall) {
+    var text = (tag || "") + " " + (hall || "");
+    var out = [];
+    for (var i = 0; i < FORMAT_RULES.length; i++) if (FORMAT_RULES[i][1].test(text)) out.push(FORMAT_RULES[i][0]);
+    return out;
+  }
+
   var C = DATA.cinemas, M = DATA.movies, H = DATA.halls, T = DATA.tags, U = DATA.urls, D = DATA.dates;
   var META = DATA.meta, SPRITE = DATA.sprite, PRICE = DATA.prices || [], GEO = DATA.geo || [];
 
@@ -527,23 +622,60 @@ var DATA = __DATA__;
     set: function (k, v) { try { localStorage.setItem("kaiyan." + k, v); } catch (e) {} }
   };
 
+  function readFavorites() {
+    try {
+      var v = JSON.parse(store.get("favorites", "{}"));
+      return { movies: Array.isArray(v.movies) ? v.movies : [], cinemas: Array.isArray(v.cinemas) ? v.cinemas : [] };
+    } catch (e) { return { movies: [], cinemas: [] }; }
+  }
+
+  var favorites = readFavorites();
+  function favoriteKey(kind, idx) { return kind === "movies" ? M[idx][0] : C[idx][0]; }
+  function isFavorite(kind, idx) { return favorites[kind].indexOf(favoriteKey(kind, idx)) >= 0; }
+  function toggleFavorite(kind, idx) {
+    var key = favoriteKey(kind, idx);
+    var at = favorites[kind].indexOf(key);
+    if (at >= 0) favorites[kind].splice(at, 1); else favorites[kind].push(key);
+    store.set("favorites", JSON.stringify(favorites));
+    render();
+  }
+
+  function favoriteButton(kind, idx, label) {
+    var on = isFavorite(kind, idx);
+    var b = el("button", "favbtn", on ? "★ 已收藏" : "☆ 收藏");
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(on));
+    b.setAttribute("aria-label", (on ? "取消收藏 " : "收藏 ") + label);
+    b.onclick = function () { toggleFavorite(kind, idx); };
+    return b;
+  }
+
   var state = {
     date: D[0],
     view: store.get("view", "movie"),
     area: store.get("area", "全部"),
     slot: "all",
     lang: "all",
+    format: "all",
     sort: "area",
     expanded: {},   // 哪幾部片的戲院清單已展開（「另有 N 家」那層）
     openCards: {},  // 哪幾部片的場次區塊是打開的（手機預設全收）
     onlyEvent: false,
+    onlyFav: false,
     showPast: false,   // 預設隱藏今天已開演的場次——全部列出再變灰對決策沒幫助
     showEnd: store.get("showEnd", "0") === "1",
     movie: null,      // 單片模式：鎖定某部電影，跨日期看全部場次
     dates: [],        // 單片模式下的多選日期，空陣列＝全部日期
     q: "",
+    planStart: store.get("planStart", "18:00"),
+    planEnd: store.get("planEnd", "23:59"),
+    maxPrice: "all",
+    maxDist: "all",
     limit: 40
   };
+  if (["movie", "cinema", "plan"].indexOf(state.view) < 0) state.view = "movie";
+  if (!/^\d\d:\d\d$/.test(state.planStart)) state.planStart = "18:00";
+  if (!/^\d\d:\d\d$/.test(state.planEnd)) state.planEnd = "23:59";
 
   var areas = Object.keys(C.reduce(function (a, c) { if (c[1]) a[c[1]] = 1; return a; }, {})).sort();
   if (areas.indexOf(state.area) < 0) state.area = "全部";
@@ -633,6 +765,25 @@ var DATA = __DATA__;
     sel.value = state.lang;
   }
 
+  function renderFormatOptions() {
+    var sel = document.getElementById("format");
+    if (sel.options.length) return;
+    var found = {};
+    for (var i = 0; i < ROWS.length; i++) {
+      formatOf(T[ROWS[i][4]], H[ROWS[i][3]]).forEach(function (f) { found[f] = (found[f] || 0) + 1; });
+    }
+    var o0 = document.createElement("option");
+    o0.value = "all"; o0.textContent = "全部影廳格式";
+    sel.appendChild(o0);
+    FORMAT_RULES.forEach(function (rule) {
+      if (!found[rule[0]]) return;
+      var o = document.createElement("option");
+      o.value = rule[0]; o.textContent = rule[0];
+      sel.appendChild(o);
+    });
+    sel.value = state.format;
+  }
+
   function renderAreaOptions() {
     var sel = document.getElementById("area");
     if (sel.options.length) return;
@@ -668,7 +819,16 @@ var DATA = __DATA__;
       if (state.area !== "全部" && C[r[0]][1] !== state.area) continue;
       if (!slotOk(r[5])) continue;
       if (state.lang !== "all" && TAG_LANG[r[4]] !== state.lang) continue;
+      if (state.format !== "all" && formatOf(T[r[4]], H[r[3]]).indexOf(state.format) < 0) continue;
       if (state.onlyEvent && !isEvent(r)) continue;
+      if (state.onlyFav) {
+        var favMatch = state.view === "cinema"
+          ? isFavorite("cinemas", r[0])
+          : state.view === "plan"
+            ? (isFavorite("movies", r[1]) || isFavorite("cinemas", r[0]))
+            : isFavorite("movies", r[1]);
+        if (!favMatch) continue;
+      }
       if (!state.showPast && D[r[2]] === NOW.date && r[5] < NOW.mins) continue;
       if (q && M[r[1]][0].toLowerCase().indexOf(q) < 0 && C[r[0]][0].toLowerCase().indexOf(q) < 0) continue;
       out.push(r);
@@ -692,12 +852,72 @@ var DATA = __DATA__;
   function priceTag(pr) {
     var a = pr[1] ? document.createElement("a") : el("span");
     a.className = "price" + (pr[2] ? " approx" : "");
-    if (pr[1]) { a.href = pr[1]; a.target = "_blank"; a.rel = "noopener"; }
+    if (pr[1]) { a.href = pr[1]; a.target = "_blank"; a.rel = "noopener noreferrer"; }
     a.textContent = "全票 $" + pr[0] + " 起";
     a.title = pr[2]
       ? "官方票價表為圖片，數字為人工轉譯、可能未及更新；點擊查看官方票價頁"
       : "各影廳規格價格不同，此為全票最低價；點擊查看官方票價頁";
     return a;
+  }
+
+  function movieLinks(info) {
+    var box = el("div", "movie-links");
+    var title = info[0] + (info[1] ? " " + info[1] : "");
+    [
+      ["YouTube 預告", "https://www.youtube.com/results?search_query=" + encodeURIComponent(title + " 電影 預告")],
+      ["IMDb", "https://www.imdb.com/find/?q=" + encodeURIComponent(title)],
+      ["PTT 討論", "https://www.google.com/search?q=" + encodeURIComponent("site:www.ptt.cc/bbs/movie " + info[0])]
+    ].forEach(function (pair) {
+      var a = document.createElement("a");
+      a.href = pair[1]; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = pair[0];
+      box.appendChild(a);
+    });
+    return box;
+  }
+
+  function icsText(v) {
+    return String(v || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+  }
+
+  function icsStamp(date, mins) {
+    var d = new Date(date + "T00:00:00");
+    d.setMinutes(mins);
+    return d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + "T" + p2(d.getHours()) + p2(d.getMinutes()) + "00";
+  }
+
+  function downloadIcs(r) {
+    var meta = META[r[1]] || {};
+    var duration = meta.d || 120;
+    var venue = C[r[0]][0];
+    var url = bookUrl(r);
+    var lines = [
+      "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Kaiyan//Showtimes//ZH-TW", "CALSCALE:GREGORIAN",
+      "BEGIN:VEVENT",
+      "UID:" + [D[r[2]], r[5], r[0], r[1]].join("-") + "@kaiyan-showtimes",
+      "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, ""),
+      "DTSTART;TZID=Asia/Taipei:" + icsStamp(D[r[2]], r[5]),
+      "DTEND;TZID=Asia/Taipei:" + icsStamp(D[r[2]], r[5] + duration + ADS),
+      "SUMMARY:" + icsText(M[r[1]][0]),
+      "LOCATION:" + icsText(venue),
+      "DESCRIPTION:" + icsText("開演時間 " + hhmm(r[5]) + "；散場時間為片長加 12 分鐘廣告的估算。")
+    ];
+    if (url) lines.push("URL:" + url);
+    lines.push("END:VEVENT", "END:VCALENDAR", "");
+    var blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+    var a = document.createElement("a");
+    var objectUrl = URL.createObjectURL(blob);
+    a.href = objectUrl;
+    a.download = (M[r[1]][0] + "-" + D[r[2]] + "-" + hhmm(r[5])).replace(/[\\/:*?\"<>|]/g, "-") + ".ics";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1000);
+  }
+
+  function calendarButton(r) {
+    var b = el("button", "calbtn", "＋行事曆");
+    b.type = "button";
+    b.title = "下載可加入 Apple、Google 或 Outlook 行事曆的 .ics 檔";
+    b.onclick = function () { downloadIcs(r); };
+    return b;
   }
 
   // 定位只存在這個瀏覽器分頁裡，不會送到任何地方——距離全部在前端算。
@@ -838,14 +1058,19 @@ var DATA = __DATA__;
     if (area) n.appendChild(el("span", "area", area));
     // 訂票連結掛在這裡：一家戲院一個入口，而不是每個場次都假裝可以直接買
     if (movieIdx == null && rows.length) {
-      var link = document.createElement("a");
-      link.className = "vlink";
-      link.href = bookUrl(rows[0]);
-      link.target = "_blank";
-      link.rel = "noopener";
-      link.textContent = label;
-      link.title = "前往 " + label + " 訂票";
-      n.appendChild(link);
+      var targetUrl = bookUrl(rows[0]);
+      if (targetUrl) {
+        var link = document.createElement("a");
+        link.className = "vlink";
+        link.href = targetUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = label;
+        link.title = "前往 " + label + " 訂票";
+        n.appendChild(link);
+      } else {
+        n.appendChild(document.createTextNode(label));
+      }
     } else {
       n.appendChild(document.createTextNode(label));
     }
@@ -927,8 +1152,10 @@ var DATA = __DATA__;
     var nc = new Set(rows.map(function (r) { return r[0]; })).size;
     m1.appendChild(el("span", null, nd + " 天・" + nc + " 家戲院・" + rows.length + " 場"));
     if (rows.some(isEvent)) m1.appendChild(el("span", "pill ev", "策展・活動場"));
+    m1.appendChild(favoriteButton("movies", mi, info[0]));
     ht.appendChild(m1);
     if (meta.s) ht.appendChild(el("div", "syn open", meta.s));
+    ht.appendChild(movieLinks(info));
     ht.appendChild(el("div", "hint", state.dates.length
       ? "已篩選 " + state.dates.length + " 個日期，再點一次日期可取消"
       : "上方日期可複選，只看你要的那幾天"));
@@ -970,6 +1197,7 @@ var DATA = __DATA__;
     var nc = new Set(rows.map(function (r) { return r[0]; })).size;
     meta1.appendChild(el("span", null, nc + " 家戲院・" + rows.length + " 場"));
     if (rows.some(isEvent)) meta1.appendChild(el("span", "pill ev", "策展・活動場"));
+    meta1.appendChild(favoriteButton("movies", mi, info[0]));
     var nDays = datesWithMovie(mi).length;
     if (nDays > 1) {
       var all = el("button", "alldays", "看全部 " + nDays + " 天場次 →");
@@ -1025,6 +1253,7 @@ var DATA = __DATA__;
       meta1.appendChild(tr);
     }
     if (rows.some(isEvent)) meta1.appendChild(el("span", "pill ev", "策展・活動場"));
+    meta1.appendChild(favoriteButton("cinemas", ci, C[ci][0]));
     ht.appendChild(meta1);
     card.appendChild(ht);
 
@@ -1034,6 +1263,86 @@ var DATA = __DATA__;
       .forEach(function (pair) { vs.appendChild(venueRow(M[pair[0]][0], null, pair[1], pair[0])); });
     card.appendChild(vs);
     return card;
+  }
+
+  function planFits(r) {
+    var start = toMins(state.planStart || "00:00");
+    var deadline = toMins(state.planEnd || "23:59");
+    if (deadline < start) deadline += 1440;
+    var show = r[5] < start && r[5] + 1440 >= start ? r[5] + 1440 : r[5];
+    if (show < start) return false;
+    var duration = (META[r[1]] && META[r[1]].d) || null;
+    if (duration != null && show + duration + ADS > deadline) return false;
+    if (state.maxPrice !== "all") {
+      var pr = PRICE[r[0]];
+      if (!pr || pr[0] > Number(state.maxPrice)) return false;
+    }
+    if (state.maxDist !== "all") {
+      var km = distKm(r[0]);
+      if (km == null || km > Number(state.maxDist)) return false;
+    }
+    return true;
+  }
+
+  function renderPlanner(rows, list) {
+    var planned = rows.filter(planFits).sort(function (a, b) {
+      if (a[5] !== b[5]) return a[5] - b[5];
+      var da = distKm(a[0]), db = distKm(b[0]);
+      if (da != null && db != null && da !== db) return da - db;
+      var pa = PRICE[a[0]] && PRICE[a[0]][0], pb = PRICE[b[0]] && PRICE[b[0]][0];
+      if (pa != null && pb != null && pa !== pb) return pa - pb;
+      return M[a[1]][0] < M[b[1]][0] ? -1 : 1;
+    });
+
+    if (!planned.length) {
+      var empty = el("div", "empty");
+      empty.appendChild(el("b", null, "這段時間沒有合適場次"));
+      empty.appendChild(el("div", null, state.maxDist !== "all" && !myPos
+        ? "要使用距離上限，請先允許「離我最近」取得定位。"
+        : "把最早開演調早、最晚散場調晚，或放寬票價與距離再試。"));
+      list.appendChild(empty);
+      return;
+    }
+
+    var box = el("div", "planlist");
+    var cap = Math.max(80, state.limit);
+    planned.slice(0, cap).forEach(function (r) {
+      var row = el("div", "planrow");
+      var meta = META[r[1]] || {};
+      var time = el("div", "plantime", hhmm(r[5]));
+      if (meta.d) time.appendChild(el("small", null, "約 " + hhmm((r[5] + meta.d + ADS) % 1440) + " 散場"));
+      row.appendChild(time);
+
+      var main = el("div", "planmain");
+      var title = el("button", "titlebtn planmovie", M[r[1]][0]);
+      title.onclick = function () { openMovie(r[1]); };
+      main.appendChild(title);
+      main.appendChild(el("div", "planvenue", C[r[0]][0] + "・" + (C[r[0]][1] || "")));
+      var bits = [];
+      if (T[r[4]] || H[r[3]]) bits.push(T[r[4]] || H[r[3]]);
+      if (PRICE[r[0]]) bits.push("全票 $" + PRICE[r[0]][0] + " 起");
+      var km = distKm(r[0]);
+      if (km != null) bits.push(km < 1 ? Math.round(km * 1000) + " 公尺" : km.toFixed(1) + " 公里");
+      main.appendChild(el("div", "plandetail", bits.join("・") || "一般場"));
+      row.appendChild(main);
+
+      var actions = el("div", "planactions");
+      actions.appendChild(calendarButton(r));
+      var url = bookUrl(r);
+      if (url) {
+        var book = el("a", "bookbtn", "影城訂票 →");
+        book.href = url; book.target = "_blank"; book.rel = "noopener noreferrer";
+        actions.appendChild(book);
+      }
+      row.appendChild(actions);
+      box.appendChild(row);
+    });
+    list.appendChild(box);
+    if (planned.length > cap) {
+      var more = el("button", "more", "顯示其餘 " + (planned.length - cap) + " 個場次");
+      more.onclick = function () { state.limit += 120; render(); };
+      list.appendChild(more);
+    }
   }
 
   // 把目前的篩選條件寫進網址，讓「這部片的場次」可以直接傳給別人。
@@ -1048,11 +1357,19 @@ var DATA = __DATA__;
     if (state.area !== "全部") p.set("a", state.area);
     if (state.slot !== "all") p.set("s", state.slot);
     if (state.lang !== "all") p.set("g", state.lang);
+    if (state.format !== "all") p.set("f", state.format);
     if (state.sort !== "area") p.set("o", state.sort);
     if (state.q) p.set("q", state.q);
     if (state.onlyEvent) p.set("e", "1");
+    if (state.onlyFav) p.set("fav", "1");
     if (state.showPast) p.set("n", "1");
     if (state.showEnd) p.set("t", "1");
+    if (state.view === "plan") {
+      if (state.planStart !== "18:00") p.set("ps", state.planStart);
+      if (state.planEnd !== "23:59") p.set("pe", state.planEnd);
+      if (state.maxPrice !== "all") p.set("mp", state.maxPrice);
+      if (state.maxDist !== "all") p.set("md", state.maxDist);
+    }
     var qs = p.toString();
     try {
       history.replaceState(null, "", qs ? location.pathname + "?" + qs : location.pathname);
@@ -1071,17 +1388,23 @@ var DATA = __DATA__;
     }
     var d = p.get("d");
     if (d && D.indexOf(d) >= 0) state.date = d;          // 網址上的日期可能已經過期，過期就忽略
-    if (p.get("v") === "cinema") state.view = "cinema";
+    if (["movie", "cinema", "plan"].indexOf(p.get("v")) >= 0) state.view = p.get("v");
     var a = p.get("a");
     if (a && (a === "全部" || areas.indexOf(a) >= 0)) state.area = a;
     var s = p.get("s");
     if (s && ["all", "morning", "afternoon", "evening", "late"].indexOf(s) >= 0) state.slot = s;
     if (p.get("g")) state.lang = p.get("g");
+    if (FORMAT_RULES.some(function (rule) { return rule[0] === p.get("f"); })) state.format = p.get("f");
     if (["next","dist","price"].indexOf(p.get("o")) >= 0) state.sort = p.get("o");
     if (p.get("q")) state.q = p.get("q").trim().toLowerCase();
     state.onlyEvent = p.get("e") === "1";
+    state.onlyFav = p.get("fav") === "1";
     state.showPast = p.get("n") === "1";
     if (p.get("t") === "1") state.showEnd = true;
+    if (/^\d\d:\d\d$/.test(p.get("ps") || "")) state.planStart = p.get("ps");
+    if (/^\d\d:\d\d$/.test(p.get("pe") || "")) state.planEnd = p.get("pe");
+    if (["300", "350", "400"].indexOf(p.get("mp")) >= 0) state.maxPrice = p.get("mp");
+    if (["3", "5", "10", "20"].indexOf(p.get("md")) >= 0) state.maxDist = p.get("md");
   }
 
   function render() {
@@ -1089,13 +1412,18 @@ var DATA = __DATA__;
     renderDates();
     renderAreaOptions();
     renderLangOptions();
+    renderFormatOptions();
     document.getElementById("vMovie").setAttribute("aria-pressed", String(state.view === "movie"));
     document.getElementById("vCinema").setAttribute("aria-pressed", String(state.view === "cinema"));
+    document.getElementById("vPlan").setAttribute("aria-pressed", String(state.view === "plan"));
     document.getElementById("tEvent").setAttribute("aria-pressed", String(state.onlyEvent));
+    document.getElementById("tFav").setAttribute("aria-pressed", String(state.onlyFav));
     document.getElementById("tSoon").setAttribute("aria-pressed", String(state.showPast));
     document.getElementById("tEnd").setAttribute("aria-pressed", String(state.showEnd));
+    document.getElementById("planner").hidden = state.view !== "plan";
 
-    var rows = filtered();
+    var baseRows = filtered();
+    var rows = state.view === "plan" ? baseRows.filter(planFits) : baseRows;
     var list = document.getElementById("list");
     list.textContent = "";
 
@@ -1117,14 +1445,17 @@ var DATA = __DATA__;
     b.appendChild(el("b", null, rows.length.toLocaleString("en-US")));
     b.appendChild(document.createTextNode(" 個場次"));
     sum.appendChild(b);
-    if (state.area !== "全部" || state.slot !== "all" || state.lang !== "all" || state.onlyEvent || state.showPast || state.q || state.sort !== "area") {
+    if (state.area !== "全部" || state.slot !== "all" || state.lang !== "all" || state.format !== "all" || state.onlyEvent || state.onlyFav || state.showPast || state.q || state.sort !== "area" || state.maxPrice !== "all" || state.maxDist !== "all") {
       var clr = el("button", "clear", "清除篩選");
       clr.onclick = function () {
-        state.area = "全部"; state.slot = "all"; state.lang = "all"; state.onlyEvent = false; state.showPast = false; state.q = ""; state.sort = "area";
+        state.area = "全部"; state.slot = "all"; state.lang = "all"; state.format = "all"; state.onlyEvent = false; state.onlyFav = false; state.showPast = false; state.q = ""; state.sort = "area"; state.maxPrice = "all"; state.maxDist = "all";
         document.getElementById("area").value = "全部";
         document.getElementById("slot").value = "all";
         document.getElementById("lang").value = "all";
+        document.getElementById("format").value = "all";
         document.getElementById("sort").value = "area";
+        document.getElementById("maxPrice").value = "all";
+        document.getElementById("maxDist").value = "all";
         document.getElementById("q").value = "";
         store.set("area", "全部");
         state.limit = 40;
@@ -1135,8 +1466,10 @@ var DATA = __DATA__;
 
     if (!rows.length) {
       var e = el("div", "empty");
-      e.appendChild(el("b", null, "這個條件查不到場次"));
-      e.appendChild(el("div", null, "換個日期、放寬地區或時段試試。"));
+      e.appendChild(el("b", null, state.view === "plan" ? "這段時間沒有合適場次" : "這個條件查不到場次"));
+      e.appendChild(el("div", null, state.view === "plan" && state.maxDist !== "all" && !myPos
+        ? "要使用距離上限，請先允許「離我最近」取得定位。"
+        : state.view === "plan" ? "把最早開演調早、最晚散場調晚，或放寬票價與距離再試。" : "換個日期、放寬地區或時段試試。"));
       list.appendChild(e);
       return;
     }
@@ -1160,6 +1493,11 @@ var DATA = __DATA__;
         frag2.appendChild(card);
       });
       list.appendChild(frag2);
+      return;
+    }
+
+    if (state.view === "plan") {
+      renderPlanner(rows, list);
       return;
     }
 
@@ -1194,7 +1532,9 @@ var DATA = __DATA__;
 
   document.getElementById("vMovie").onclick = function () { state.view = "movie"; state.limit = 40; store.set("view", "movie"); render(); };
   document.getElementById("vCinema").onclick = function () { state.view = "cinema"; state.limit = 40; store.set("view", "cinema"); render(); };
+  document.getElementById("vPlan").onclick = function () { state.view = "plan"; state.limit = 80; store.set("view", "plan"); render(); };
   document.getElementById("tEvent").onclick = function () { state.onlyEvent = !state.onlyEvent; state.limit = 40; render(); };
+  document.getElementById("tFav").onclick = function () { state.onlyFav = !state.onlyFav; state.limit = 40; render(); };
   document.getElementById("tSoon").onclick = function () { state.showPast = !state.showPast; state.limit = 40; render(); };
   document.getElementById("tEnd").onclick = function () { state.showEnd = !state.showEnd; store.set("showEnd", state.showEnd ? "1" : "0"); render(); };
   document.getElementById("near").onclick = function () {
@@ -1246,6 +1586,7 @@ var DATA = __DATA__;
   document.getElementById("area").onchange = function (e) { state.area = e.target.value; store.set("area", state.area); state.limit = 40; render(); };
   document.getElementById("slot").onchange = function (e) { state.slot = e.target.value; state.limit = 40; render(); };
   document.getElementById("lang").onchange = function (e) { state.lang = e.target.value; state.limit = 40; render(); };
+  document.getElementById("format").onchange = function (e) { state.format = e.target.value; state.limit = 40; render(); };
   document.getElementById("sort").onchange = function (e) {
     state.sort = e.target.value;
     // 選了依距離卻還沒定位，直接幫他觸發，不要讓他選了卻沒反應
@@ -1258,13 +1599,49 @@ var DATA = __DATA__;
     render();
   });
 
+  ["planStart", "planEnd"].forEach(function (id) {
+    document.getElementById(id).onchange = function (e) {
+      state[id] = e.target.value || (id === "planStart" ? "00:00" : "23:59");
+      store.set(id, state[id]);
+      state.limit = 80;
+      render();
+    };
+  });
+  document.getElementById("maxPrice").onchange = function (e) { state.maxPrice = e.target.value; state.limit = 80; render(); };
+  document.getElementById("maxDist").onchange = function (e) {
+    state.maxDist = e.target.value; state.limit = 80;
+    if (state.maxDist !== "all" && !myPos) document.getElementById("near").click();
+    render();
+  };
+
+  var installPrompt = null;
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault(); installPrompt = e; document.getElementById("install").hidden = false;
+  });
+  document.getElementById("install").onclick = function () {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    installPrompt.userChoice.finally(function () { installPrompt = null; document.getElementById("install").hidden = true; });
+  };
+  window.addEventListener("appinstalled", function () { document.getElementById("install").hidden = true; });
+  if ("serviceWorker" in navigator && location.protocol === "https:") {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+  }
+
   readUrl();
   // 從網址進來時若已帶進階條件，把面板展開——否則使用者看不出結果為什麼被篩過
-  if (state.lang !== "all" || state.slot !== "all" || state.onlyEvent || state.showPast || state.showEnd) setExtra(true);
+  if (state.lang !== "all" || state.format !== "all" || state.slot !== "all" || state.onlyEvent || state.onlyFav || state.showPast || state.showEnd) setExtra(true);
   document.getElementById("slot").value = state.slot;
   document.getElementById("lang").value = state.lang;
+  document.getElementById("format").value = state.format;
   document.getElementById("sort").value = state.sort;
   document.getElementById("q").value = state.q;
+  document.getElementById("planStart").value = state.planStart;
+  document.getElementById("planEnd").value = state.planEnd;
+  document.getElementById("maxPrice").value = state.maxPrice;
+  document.getElementById("maxDist").value = state.maxDist;
   render();
 })();
 </script>
+</body>
+</html>

@@ -4,9 +4,21 @@
 // 為什麼海報要內嵌 data URI：發佈出去的是單一 HTML 檔，相對路徑的圖片檔不會跟著走。
 import { readFile, writeFile, readdir, mkdir, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { matchKey, foldTitle } from './lib/common.mjs';
 
 const root = new URL('.', import.meta.url).pathname;
+const SITE_URL = (process.env.SITE_URL || 'https://yhhuan.github.io/kaiyan-showtimes').replace(/\/$/, '');
+
+// 所有外部網址最後都會進 href。來源若意外混入 javascript:、data: 或壞掉的字串，
+// 寧可拿掉連結也不要讓每日資料更新變成注入入口。
+function safeHttpUrl(value) {
+  if (!value) return '';
+  try {
+    const u = new URL(String(value));
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : '';
+  } catch { return ''; }
+}
 const SOURCE_NAMES = {
   showtimes: '秀泰',
   ambassador: '國賓',
@@ -231,7 +243,7 @@ const urlVotes = new Map();
 for (const r of merged) {
   const ci = cinemas.id([r.cinema, r.area || '']);
   // {d}=2026-08-21 形式、{s}=2026/08/21 形式（各站寫法不同，佔位符自己帶格式）
-  const tpl = (r.url || '')
+  const tpl = safeHttpUrl(r.url)
     .replace(r.date, '{d}')
     .replace(r.date.replace(/-/g, '/'), '{s}')
     .replace(encodeURIComponent(r.date.replace(/-/g, '/')), '{s}');
@@ -274,7 +286,8 @@ const packed = [...groups.values()]
     return g.key.map(b36).join(',') + ',' + times + (seats.replace(/0/g, '') ? ',' + seats : '');
   })
   .join(';');
-const rows = merged; // 只用來計數
+const rows = merged; // 只用來產生索引頁；前端的精確場次數在 groups 去重後計算
+const sessionCount = [...groups.values()].reduce((n, g) => n + new Set(g.times).size, 0);
 
 // ── 票價（data/prices.json）──────────────────────────────
 // 只取「全票」的最低價當作比較基準，標示成「起」。各家把票價按影廳規格分級，
@@ -293,7 +306,7 @@ for (const [cinema, info] of Object.entries(prices)) {
   if (!full.length) continue;
   priceByCinema[cinema] = {
     from: Math.min(...full),
-    url: info.url || null,
+    url: safeHttpUrl(info.url) || null,
     manual: /人工讀圖/.test(info.source || ''), // 這幾家的票價表是圖片，數字靠人工轉譯、不會自動更新
   };
 }
@@ -362,6 +375,12 @@ const payload = {
   sprite: sprite ? { uri: sprite.uri, cols: SPRITE_COLS, rows: sprite.rows } : null,
 };
 
+// JSON 會直接放進 <script>。即使上游片名出現 </script> 也不能讓它提早關閉標籤；
+// U+2028/U+2029 則避開舊 JavaScript parser 對行分隔字元的差異。
+const serializedPayload = JSON.stringify(payload)
+  .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
+  .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+
 const withGeo = cinemaGeo.filter(Boolean).length;
 const withPoster = Object.values(metaByIdx).filter((m) => m.i != null).length;
 const withSyn = Object.values(metaByIdx).filter((m) => m.s).length;
@@ -396,20 +415,150 @@ const notice =
   (staleSources.length ? `已停用過期來源：${staleSources.join('、')}。` : '');
 
 const tpl = await readFile(`${root}site_template.html`, 'utf8');
-const html = tpl
-  .replace('__DATA__', () => JSON.stringify(payload))
+let html = tpl
+  .replace('__DATA__', () => serializedPayload)
   .replace(/__SOURCES__/g, sources)
   .replace(/__GENERATED__/g, generated)
   .replace(/__NOTICE__/g, notice)
+  .replace(/__SITE_URL__/g, SITE_URL)
   .replace(/__NCINEMA__/g, String(cinemas.list.length))
   .replace(/__NMOVIE__/g, String(movies.list.length))
-  .replace(/__NSESSION__/g, rows.length.toLocaleString('en-US'))
+  .replace(/__NSESSION__/g, sessionCount.toLocaleString('en-US'))
   .replace(/__LASTDATE__/g, dates.list.length ? dates.list[dates.list.length - 1].slice(5).replace('-', '/') : '—');
+
+// CSP 不允許任意 inline script；資料每天變動，因此建置後為「這一份」script 計算 hash。
+const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+if (!inlineScript) throw new Error('找不到主程式，無法產生 CSP hash');
+const scriptHash = createHash('sha256').update(inlineScript).digest('base64');
+html = html.replace('__SCRIPT_HASH__', scriptHash);
 
 await mkdir(`${root}out`, { recursive: true }); // 乾淨 checkout 下 out/ 不存在（已 gitignore）
 await writeFile(`${root}out/index.html`, html);
+
+const generatedAt = new Date().toISOString();
+const siteStatus = {
+  generatedAt,
+  generatedTaipei: generated,
+  counts: {
+    sessions: sessionCount,
+    cinemas: cinemas.list.length,
+    geocodedCinemas: withGeo,
+    movies: movies.list.length,
+    dates: dates.list.length,
+  },
+  coverage: { firstDate: dates.list[0] || null, lastDate: dates.list.at(-1) || null },
+  sources: [...present].sort().map((source) => ({
+    id: source,
+    name: SOURCE_NAMES[source] || source,
+    ageHours: freshness[source] == null ? null : Number(freshness[source].toFixed(1)),
+  })),
+  warnings: { absent, viaBackup, lagging, staleSources },
+};
+await writeFile(`${root}out/site-status.json`, JSON.stringify(siteStatus, null, 2) + '\n');
+
+// 搜尋引擎不會執行所有互動操作，另產生穩定的「電影／戲院／日期」文字頁。
+// 這些頁同時也是無 JavaScript 或低階裝置的可讀退路，不複製海報、不引入第三方追蹤。
+const esc = (v) => String(v ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+const slugFor = (label) => {
+  const clean = String(label).normalize('NFKC').trim()
+    .replace(/[^\p{Letter}\p{Number}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 48) || 'item';
+  return `${clean}-${createHash('sha256').update(String(label)).digest('hex').slice(0, 8)}`;
+};
+const urlPath = (kind, slug) => `${kind}/${encodeURIComponent(slug)}/`;
+const displaySeen = new Set();
+const displayRows = merged.map((r) => ({
+  ...r,
+  movieTitle: movieInfo.get(r.movie)?.title || r.movie,
+  sourceUrl: safeHttpUrl(r.url),
+})).filter((r) => {
+  const key = [r.cinema, r.movieTitle, r.date, r.time, r.hall || '', (r.tags || []).join('・')].join('|');
+  if (displaySeen.has(key)) return false;
+  displaySeen.add(key);
+  return true;
+});
+
+const groupRows = (key) => {
+  const out = new Map();
+  for (const row of displayRows) {
+    const value = row[key];
+    if (!out.has(value)) out.set(value, []);
+    out.get(value).push(row);
+  }
+  return out;
+};
+
+const seoPage = ({ title, description, canonical, headings, values, mainHref }) => `<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}｜開演</title><meta name="description" content="${esc(description)}">
+<meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; upgrade-insecure-requests">
+<link rel="canonical" href="${esc(canonical)}"><link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<style>body{margin:0;background:#f3f0e8;color:#171613;font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;line-height:1.6}main{max-width:900px;margin:auto;padding:38px 20px 80px}a{color:#855126}h1{font-family:"PMingLiU",serif;margin:.2em 0}.muted{color:#69655e}table{width:100%;border-collapse:collapse;margin:24px 0;background:#faf8f2}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid #d5d0c4;vertical-align:top}th{font-size:.8rem;color:#69655e}@media(max-width:640px){th:nth-child(4),td:nth-child(4){display:none}th,td{padding:8px 4px}}</style>
+</head><body><main><p><a href="${esc(mainHref)}">← 回到互動版查詢</a></p><h1>${esc(title)}</h1><p>${esc(description)}</p>
+<p class="muted">更新於 ${esc(generated)}；場次與票價以影城官方公告為準。</p>
+<table><thead><tr>${headings.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>
+${values.map((cells) => `<tr>${cells.map((cell, i) => `<td>${i === cells.length - 1 && cell.href ? `<a href="${esc(cell.href)}" target="_blank" rel="noopener noreferrer">${esc(cell.text)}</a>` : esc(cell.text)}</td>`).join('')}</tr>`).join('\n')}
+</tbody></table><p><a href="${esc(mainHref)}">用地區、時段、語言、影廳格式與距離繼續篩選 →</a></p></main></body></html>`;
+
+const sitemapPaths = [''];
+async function writeSeoGroup(kind, grouped, makePage) {
+  for (const [label, sourceRows] of grouped) {
+    const slug = slugFor(label);
+    const rel = urlPath(kind, slug);
+    const dir = `${root}out/${kind}/${slug}`;
+    await mkdir(dir, { recursive: true });
+    await writeFile(`${dir}/index.html`, makePage(label, sourceRows, `${SITE_URL}/${rel}`));
+    sitemapPaths.push(rel);
+  }
+}
+
+const sortedRows = (sourceRows) => [...sourceRows].sort((a, b) =>
+  a.date.localeCompare(b.date) || a.time.localeCompare(b.time) || a.cinema.localeCompare(b.cinema));
+const linkCell = (r) => ({ text: r.sourceUrl ? '影城訂票／場次頁 →' : '請洽影城', href: r.sourceUrl || null });
+
+await writeSeoGroup('movie', groupRows('movieTitle'), (label, sourceRows, canonical) => seoPage({
+  title: `${label} 電影時刻`,
+  description: `${label} 的跨影城、跨日期電影場次，共 ${sourceRows.length} 場。`,
+  canonical,
+  headings: ['日期', '戲院', '時間／版本', '官方來源'],
+  values: sortedRows(sourceRows).map((r) => [
+    { text: r.date }, { text: `${r.cinema}${r.area ? `・${r.area}` : ''}` },
+    { text: `${r.time}${r.tags?.length ? `・${r.tags.join('・')}` : r.hall ? `・${r.hall}` : ''}` }, linkCell(r),
+  ]),
+  mainHref: `${SITE_URL}/?m=${encodeURIComponent(label)}`,
+}));
+
+await writeSeoGroup('cinema', groupRows('cinema'), (label, sourceRows, canonical) => seoPage({
+  title: `${label} 電影時刻`,
+  description: `${label} 的未來電影場次，共 ${sourceRows.length} 場。`,
+  canonical,
+  headings: ['日期', '電影', '時間／版本', '官方來源'],
+  values: sortedRows(sourceRows).map((r) => [
+    { text: r.date }, { text: r.movieTitle },
+    { text: `${r.time}${r.tags?.length ? `・${r.tags.join('・')}` : r.hall ? `・${r.hall}` : ''}` }, linkCell(r),
+  ]),
+  mainHref: `${SITE_URL}/?q=${encodeURIComponent(label)}&v=cinema`,
+}));
+
+await writeSeoGroup('date', groupRows('date'), (label, sourceRows, canonical) => seoPage({
+  title: `${label} 全台電影時刻`,
+  description: `${label} 的全台電影場次，共 ${sourceRows.length} 場。`,
+  canonical,
+  headings: ['電影', '戲院', '時間／版本', '官方來源'],
+  values: sortedRows(sourceRows).map((r) => [
+    { text: r.movieTitle }, { text: `${r.cinema}${r.area ? `・${r.area}` : ''}` },
+    { text: `${r.time}${r.tags?.length ? `・${r.tags.join('・')}` : r.hall ? `・${r.hall}` : ''}` }, linkCell(r),
+  ]),
+  mainHref: `${SITE_URL}/?d=${encodeURIComponent(label)}`,
+}));
+
+const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapPaths
+  .map((p) => `  <url><loc>${esc(`${SITE_URL}/${p}`)}</loc><lastmod>${todayTPE}</lastmod></url>`).join('\n')}\n</urlset>\n`;
+await writeFile(`${root}out/sitemap.xml`, sitemap);
+await writeFile(`${root}out/robots.txt`, `User-agent: *\nAllow: /\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 console.log(
-  `\nout/index.html: ${rows.length} 場次 / ${cinemas.list.length} 影城 / ${movies.list.length} 部片` +
+  `\nout/index.html: ${sessionCount} 場次 / ${cinemas.list.length} 影城 / ${movies.list.length} 部片` +
     `（${mergedTitles} 部跨影城異名合併、${eventFolded} 個特別場歸戶、海報 ${withPoster}、簡介 ${withSyn}、座標 ${withGeo}）` +
-    `, ${(html.length / 1024 / 1024).toFixed(2)} MB`,
+    `, ${(html.length / 1024 / 1024).toFixed(2)} MB；另產生 ${sitemapPaths.length - 1} 個索引頁`,
 );

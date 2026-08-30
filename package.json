@@ -2,6 +2,12 @@
   "name": "kaiyan-showtimes",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "node build_site.mjs",
+    "health": "node check_health.mjs",
+    "check": "node --check build_site.mjs && node --check sw.js && node --check tests/smoke.mjs",
+    "smoke": "node tests/smoke.mjs"
+  },
   "devDependencies": {
     "playwright": "^1.60.0"
   }

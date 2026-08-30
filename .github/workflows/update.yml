@@ -20,24 +20,26 @@ env:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      # 第三方 Actions 固定到完整 commit SHA；版本註解方便 Dependabot 提醒升級。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
+          cache: npm
 
       # 上一輪抓到的 data/*.json。某家這輪掛掉時就沿用它的舊檔，
       # build_site 會依 _status.json 的時間戳決定還能不能用（超過 72 小時就整個剔除）。
       - name: 取回上一輪的場次資料
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             data
@@ -49,7 +51,7 @@ jobs:
       - name: 安裝相依套件
         run: |
           set -e
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
           if ! command -v ffmpeg >/dev/null 2>&1; then
             sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -66,9 +68,12 @@ jobs:
       - name: 重建網頁
         run: node build_site.mjs
 
+      - name: 瀏覽器冒煙測試
+        run: npm run smoke
+
       - name: 保存本輪資料供下一輪備援
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             data
@@ -78,11 +83,14 @@ jobs:
       - name: 準備發佈內容
         run: |
           mkdir -p _site
-          cp out/index.html _site/
-          cp favicon.svg _site/
+          cp -R out/. _site/
+          cp favicon.svg icon-192.png icon-512.png manifest.webmanifest sw.js _site/
+          touch _site/.nojekyll
           test -s _site/index.html
+          test -s _site/site-status.json
+          test -s _site/sitemap.xml
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: _site
 
@@ -110,9 +118,12 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
