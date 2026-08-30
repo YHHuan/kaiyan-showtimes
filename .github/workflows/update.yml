@@ -90,9 +90,19 @@ jobs:
           test -s _site/site-status.json
           test -s _site/sitemap.xml
 
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+      # upload-pages-artifact 內部仍引用可移動的 @v4 tag，會違反 repository 的 SHA-only 政策；
+      # 依它的官方步驟自行封裝，再直接使用固定 SHA 的 upload-artifact。
+      - name: 封裝 Pages artifact
+        run: |
+          tar --dereference --hard-dereference --directory _site \
+            -cvf "$RUNNER_TEMP/artifact.tar" --exclude=.git --exclude=.github .
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          path: _site
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
 
       # 來源掛掉時網站會標示，但你不會知道。有設 secret 才發通知，沒設就靜靜跳過。
       # 設定方式：repo → Settings → Secrets and variables → Actions → New repository secret
