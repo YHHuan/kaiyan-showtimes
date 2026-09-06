@@ -266,6 +266,9 @@
     cursor: pointer;
   }
   .syn.open { -webkit-line-clamp: unset; }
+  .credits { color: var(--ink3); font-size: 12px; line-height: 1.65; margin-top: 7px; }
+  .credits span { display: block; }
+  .credits b { color: var(--ink2); font-weight: 600; }
 
   /* ── 戲院與場次 ───────────────────────────── */
   .cardtoggle {
@@ -496,13 +499,13 @@
   <main id="list" tabindex="-1"></main>
 
   <footer>
-    <p>資料來源：<b>__SOURCES__</b> 各家官方公開場次頁／API。本站只顯示場次時刻，
+    <p>資料來源：<b>__SOURCES__</b> 的官方公開場次頁／API 與頁面標示的備援來源。本站只顯示場次時刻，
       <b>不提供訂票也不處理付款</b>；點場次會跳轉至該影城自己的訂票頁完成購票。</p>
     <p>若您是影城業者，希望調整或移除本站呈現的貴公司場次資料，請至
       <a href="https://github.com/YHHuan/kaiyan-showtimes/issues" target="_blank" rel="noopener">GitHub Issues</a>
       告知，我們會儘速配合處理。</p>
     <p>場次更新於 <b>__GENERATED__</b>，每日自動重抓。<span id="notice"></span>
-      實際場次與票種以各影城官方公告為準；威秀影城因全站機器人防護尚未納入。</p>
+      實際場次與票種以各影城官方公告為準；威秀因官方站機器人防護，目前僅有開眼提供的當天場次。</p>
     <p>散場時間為估算（片長＋約 12 分鐘廣告），僅供參考。</p>
     <p>座位色點：<span class="seat s1"></span> 空位多　<span class="seat s2"></span> 剩一些　<span class="seat s3"></span> 快滿了。
       只有新光、美麗新、in89 的來源提供席次，而且是<b>抓取當下</b>的快照、不是即時，
@@ -677,7 +680,20 @@ var DATA = __DATA__;
   if (!/^\d\d:\d\d$/.test(state.planStart)) state.planStart = "18:00";
   if (!/^\d\d:\d\d$/.test(state.planEnd)) state.planEnd = "23:59";
 
-  var areas = Object.keys(C.reduce(function (a, c) { if (c[1]) a[c[1]] = 1; return a; }, {})).sort();
+  // 台灣常見的地理閱讀順序：西部由北到南，再列東部與離島；不要用 Unicode 筆畫排序。
+  var AREA_ORDER = [
+    "台北市", "新北市", "基隆市", "桃園市", "新竹市", "新竹縣", "苗栗縣",
+    "台中市", "彰化縣", "南投縣", "雲林縣", "嘉義市", "嘉義縣", "台南市",
+    "高雄市", "屏東縣", "宜蘭縣", "花蓮縣", "台東縣", "澎湖縣", "金門縣", "連江縣"
+  ];
+  function areaRank(area) {
+    var i = AREA_ORDER.indexOf(area);
+    return i < 0 ? AREA_ORDER.length : i;
+  }
+  function compareAreas(a, b) {
+    return areaRank(a) - areaRank(b) || a.localeCompare(b, "zh-Hant");
+  }
+  var areas = Object.keys(C.reduce(function (a, c) { if (c[1]) a[c[1]] = 1; return a; }, {})).sort(compareAreas);
   if (areas.indexOf(state.area) < 0) state.area = "全部";
 
   // 台北時間的「現在」，用來判斷場次是否已開演
@@ -875,6 +891,24 @@ var DATA = __DATA__;
     return box;
   }
 
+  function movieCredits(meta) {
+    if (!meta.r && !meta.c) return null;
+    var box = el("div", "credits");
+    if (meta.r) {
+      var directors = el("span");
+      directors.appendChild(el("b", null, "導演　"));
+      directors.appendChild(document.createTextNode(meta.r));
+      box.appendChild(directors);
+    }
+    if (meta.c) {
+      var cast = el("span");
+      cast.appendChild(el("b", null, "主演　"));
+      cast.appendChild(document.createTextNode(meta.c));
+      box.appendChild(cast);
+    }
+    return box;
+  }
+
   function icsText(v) {
     return String(v || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
   }
@@ -988,7 +1022,7 @@ var DATA = __DATA__;
     if (state.sort === "price") return nullsLast(PRICE[a[0]] && PRICE[a[0]][0], PRICE[b[0]] && PRICE[b[0]][0]);
     // 依地區：同縣市的排在一起，區內照名稱
     var aa = C[a[0]][1] || "", ba = C[b[0]][1] || "";
-    if (aa !== ba) return aa < ba ? -1 : 1;
+    if (aa !== ba) return compareAreas(aa, ba);
     return byName;
   }
 
@@ -1154,6 +1188,8 @@ var DATA = __DATA__;
     if (rows.some(isEvent)) m1.appendChild(el("span", "pill ev", "策展・活動場"));
     m1.appendChild(favoriteButton("movies", mi, info[0]));
     ht.appendChild(m1);
+    var credits = movieCredits(meta);
+    if (credits) ht.appendChild(credits);
     if (meta.s) ht.appendChild(el("div", "syn open", meta.s));
     ht.appendChild(movieLinks(info));
     ht.appendChild(el("div", "hint", state.dates.length
@@ -1205,6 +1241,9 @@ var DATA = __DATA__;
       meta1.appendChild(all);
     }
     ht.appendChild(meta1);
+
+    var credits = movieCredits(meta);
+    if (credits) ht.appendChild(credits);
 
     if (meta.s) {
       var syn = el("div", "syn", meta.s);
@@ -1466,10 +1505,19 @@ var DATA = __DATA__;
 
     if (!rows.length) {
       var e = el("div", "empty");
-      e.appendChild(el("b", null, state.view === "plan" ? "這段時間沒有合適場次" : "這個條件查不到場次"));
-      e.appendChild(el("div", null, state.view === "plan" && state.maxDist !== "all" && !myPos
+      var matchedCinemas = state.q ? C.filter(function (c) { return c[0].toLowerCase().indexOf(state.q) >= 0; }) : [];
+      e.appendChild(el("b", null, state.view === "plan" ? "這段時間沒有合適場次"
+        : matchedCinemas.length ? "有收錄「" + matchedCinemas.map(function (c) { return c[0]; }).join("、") + "」" : "這個條件查不到場次"));
+      e.appendChild(el("div", null, matchedCinemas.length
+        ? "目前日期或篩選條件沒有可顯示場次；部分獨立戲院的備援來源只提供當天資料。"
+        : state.view === "plan" && state.maxDist !== "all" && !myPos
         ? "要使用距離上限，請先允許「離我最近」取得定位。"
         : state.view === "plan" ? "把最早開演調早、最晚散場調晚，或放寬票價與距離再試。" : "換個日期、放寬地區或時段試試。"));
+      if (matchedCinemas.length && state.date === NOW.date && !state.showPast) {
+        var showToday = el("button", "clear", "顯示今天已開演場次");
+        showToday.onclick = function () { state.showPast = true; render(); };
+        e.appendChild(showToday);
+      }
       list.appendChild(e);
       return;
     }

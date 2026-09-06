@@ -20,6 +20,7 @@ const SHAPE = {
   centuryasia: { hallPct: [80, 100], movies: [20, 80] },
   skcinemas:   { hallPct: [80, 100], movies: [8, 60] },
   miranew:     { hallPct: [80, 100], movies: [5, 50] },
+  miramar:     { hallPct: [80, 100], movies: [5, 50] },
   lux:         { hallPct: [80, 100], movies: [4, 40] },
   in89:        { hallPct: [50, 100], movies: [10, 60] },
   showtimes:   { hallPct: [0, 100],  movies: [20, 90] },
@@ -36,6 +37,7 @@ const FLOOR = {
   // 美麗新的公布天數會在「只有今天」與「未來六天」之間跳（實測 8/21 是 624 筆六天、
   // 8/26 只有 125 筆一天，站方自己就這樣）。下限只抓「兩館全掛」，不抓公布天數變少。
   miranew: 60,       // 兩館單日約 125，六天約 720
+  miramar: 30,       // 美麗華大直一館，官方多日端點實測約 180
   in89: 100,         // in89 2 館，實測約 520
   atmovies: 40,      // 開眼補的藝文館，只有當天，實測約 240
   arthouse: 20,      // 光點華山＋府中15，實測約 180

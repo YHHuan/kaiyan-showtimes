@@ -7,9 +7,7 @@
 // 涵蓋範圍（可自動重抓，逐次執行都會打官網重新解析）：
 //   秀泰（15 館）—— 官方 bootstrap API，每館各自的 meta.ticketTypes。
 //   樂聲影城(西門町)（1 館）—— 官方票價頁是乾淨的 HTML table。
-//   美麗新 大直皇家影城（1 館）—— miramarcinemas.tw 官方票價頁是乾淨的 HTML table。
-//     這個網域用的是「美麗華影城」舊品牌名，但實測 /Movie/Index?type=now 有 2026-08 的
-//     現正熱映清單，是持續在維護的現役官網，不是停用的舊快照。
+//   美麗華大直影城（1 館）—— miramarcinemas.tw 官方票價頁是乾淨的 HTML table。
 //
 // 涵蓋範圍（票價表本身是一張圖片，沒有 OCR 工具可用，無法逐次自動解析）：
 //   美麗新 台茂美麗新影城（1 館）、喜樂時代影城（4 館）—— 下面用常數硬編碼，
@@ -95,12 +93,12 @@ async function fetchLux() {
   console.log('樂聲：1 館');
 }
 
-// ---------------- 美麗新 大直皇家影城（1 館，官方 HTML table） ----------------
-async function fetchMiranewDazhi() {
+// ---------------- 美麗華大直影城（1 館，官方 HTML table） ----------------
+async function fetchMiramarDazhi() {
   const url = 'https://www.miramarcinemas.tw/Home/dazhiprice';
   const html = await politeFetch(url);
   const tableM = html.match(/<h6>[\s\S]*?票價表[\s\S]*?<table[^>]*>([\s\S]*?)<\/table>/);
-  if (!tableM) throw new Error('大直皇家票價表結構可能改了，找不到 <table>');
+  if (!tableM) throw new Error('美麗華大直票價表結構可能改了，找不到 <table>');
   const num = (s) => {
     const m = s.match(/\d+/);
     return m ? Number(m[0]) : null;
@@ -116,8 +114,8 @@ async function fetchMiranewDazhi() {
     if (num(concession) != null) p['優待票'] = num(concession);
     if (Object.keys(p).length) tiers.push({ format: mode, prices: p });
   }
-  if (!tiers.length) throw new Error('大直皇家票價表解到 0 列');
-  setCinema('台北大直美麗新皇家影城', {
+  if (!tiers.length) throw new Error('美麗華大直票價表解到 0 列');
+  setCinema('美麗華大直影城', {
     source: '官方',
     url,
     updatedAt: fetchedAt,
@@ -127,7 +125,7 @@ async function fetchMiranewDazhi() {
       '片長超過2小時30分鐘加收20元，之後每30分鐘再加10元；HFR版加價10元。' +
       '愛心票/敬老票為全票半價，須本人現場出示證件購買，官網未列出固定金額，故未併入上表。',
   });
-  console.log('美麗新 大直皇家：1 館');
+  console.log('美麗華大直：1 館');
 }
 
 // ---------------- 美麗新 台茂、喜樂時代：票價表是圖片，人工讀圖轉譯後硬編碼 ----------------
@@ -208,7 +206,7 @@ function addImageSourcedPrices() {
 const sources = [
   ['秀泰', fetchShowtimes],
   ['樂聲', fetchLux],
-  ['美麗新 大直皇家', fetchMiranewDazhi],
+  ['美麗華大直', fetchMiramarDazhi],
 ];
 for (const [label, fn] of sources) {
   try {

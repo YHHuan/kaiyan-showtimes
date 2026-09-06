@@ -251,8 +251,9 @@ const ATMOVIES_CINEMAS = {
   t06611: { name: '台南FOCUS威秀影城', region: 'a06' },
   t07703: { name: '高雄大遠百威秀影城', region: 'a07' },
 
-  // -- 藝文/獨立館（10館）：代碼沿用 fetch/atmovies.mjs 的 ARTHOUSE 白名單，名稱本來就一致 --
+  // -- 藝文/獨立館與美麗華：代碼取自開眼地區頁；名稱與場次抓取器一致 --
   t02a08: { name: '誠品電影院', region: 'a02' },
+  t02d05: { name: '美麗華大直影城', region: 'a02' },
   t02d20: { name: '光點台北電影院', region: 'a02' },
   t02b07: { name: '真善美戲院', region: 'a02' },
   t02f05: { name: '景美佳佳戲院', region: 'a02' },

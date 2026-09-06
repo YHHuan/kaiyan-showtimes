@@ -46,6 +46,26 @@ try {
   if (!response?.ok()) throw new Error(`首頁 HTTP ${response?.status()}`);
   if (!(await page.title()).includes('開演')) throw new Error('首頁 title 不正確');
   if (await page.locator('#format option').count() < 2) throw new Error('影廳格式選項未產生');
+  const areaOptions = (await page.locator('#area option').allTextContents()).filter((x) => x !== '全部地區');
+  const geographicOrder = ['台北市', '新北市', '基隆市', '桃園市', '新竹市', '新竹縣', '苗栗縣', '台中市', '彰化縣', '南投縣', '雲林縣', '嘉義市', '嘉義縣', '台南市', '高雄市', '屏東縣', '宜蘭縣', '花蓮縣', '台東縣', '澎湖縣', '金門縣', '連江縣'];
+  const expectedAreas = geographicOrder.filter((x) => areaOptions.includes(x));
+  if (areaOptions.join('|') !== expectedAreas.join('|')) throw new Error(`縣市不是地理順序：${areaOptions.join('、')}`);
+  if (!(await page.content()).includes('美麗華大直影城')) throw new Error('缺少美麗華大直影城');
+  if (await page.locator('.credits').count() < 1) throw new Error('電影卡片沒有導演／演員資料');
+  await page.evaluate(() => {
+    const option = document.createElement('option');
+    option.value = '__測試無場次__';
+    option.textContent = '測試無場次';
+    document.querySelector('#area').appendChild(option);
+  });
+  await page.locator('#area').selectOption('__測試無場次__');
+  await page.locator('#q').fill('美麗華大直影城');
+  await page.locator('#q').dispatchEvent('input');
+  await page.locator('#vCinema').click();
+  if (!(await page.locator('.empty b').innerText()).includes('有收錄「美麗華大直影城」')) {
+    throw new Error('已收錄戲院的無場次提示不正確');
+  }
+  await page.reload({ waitUntil: 'domcontentloaded' });
   const viewport = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
   if (viewport.scrollWidth > viewport.width + 1) throw new Error(`手機版出現水平溢出：${viewport.scrollWidth}/${viewport.width}`);
   if (process.env.SCREENSHOT_DIR) {
@@ -60,10 +80,12 @@ try {
   if (await page.locator('.favbtn[aria-pressed="true"]').count() < 1) throw new Error('收藏未保存於本機');
 
   await page.locator('#vPlan').click();
-  await page.locator('#planStart').fill('00:00');
+  await page.locator('#planStart').fill('20:00');
   await page.locator('#planStart').dispatchEvent('change');
-  await page.locator('#planEnd').fill('23:59');
+  await page.locator('#planEnd').fill('04:00');
   await page.locator('#planEnd').dispatchEvent('change');
+  // 測試可能在深夜執行；納入今天已開演場次，避免「當下沒有未開演場次」造成時間依賴。
+  if (await page.locator('#tSoon').getAttribute('aria-pressed') !== 'true') await page.locator('#tSoon').click();
   await page.locator('.planrow').first().waitFor({ state: 'visible' });
   if (process.env.SCREENSHOT_DIR) {
     await page.screenshot({ path: resolve(process.env.SCREENSHOT_DIR, 'planner-mobile.png') });

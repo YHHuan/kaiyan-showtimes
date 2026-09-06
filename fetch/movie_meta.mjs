@@ -1,4 +1,4 @@
-// 電影 metadata 管線：從各來源的官方端點蒐集海報／簡介／分級／片長，
+// 電影 metadata 管線：從各來源的官方端點蒐集海報／簡介／分級／片長／導演／主要演員，
 // 依 data/*.json（動態掃描，排除 movie_meta.json 本身）出現的片名建立對照表，並下載海報縮圖。
 //
 // 來源優先順序（越前面覆蓋 metaSource 的欄位優先權越高，缺欄位再由後面補）：
@@ -10,7 +10,8 @@
 //   5. 美麗新：  首頁抓 NowShowing 的 MovieId 清單 → 逐一 Movie/Detail?type=NowShowing&MovieId=<GUID>
 //               （注意：這支只回「該部片」的資料，不是全片單，要逐一請求；頁內嵌 JSON 的跳脫格式
 //                跟 miranew.mjs 的 CinemaList 不同，見下方 unescapeEmbeddedJson 註解）
-//   6. 開眼電影網（atmovies）：上面 5 個來源都查無時的最後防線，尤其是藝文/影展小眾片
+//   6. 美麗華大直：官方 GetMovie API 一次取得片單、簡介、海報、分級、片長、導演與演員。
+//   7. 開眼電影網（atmovies）：上面來源都查無時的最後防線，尤其是藝文/影展小眾片
 //      （秀泰、連鎖院線都不會有）。用官方搜尋表單 POST search.atmovies.com.tw/search/
 //      （必須帶 Referer，否則永遠 "No Result"）拿到片碼，再抓 /movie/<code>/ detail 頁面。
 //      逐一片名查、無法批次，且沒有台灣分級文字，分級改用 data/*.json 本身既有的 rating 欄位補。
@@ -84,6 +85,27 @@ function cleanEn(s) {
   return t || null;
 }
 
+function cleanPeople(value) {
+  const raw = Array.isArray(value) ? value : [value];
+  const out = [];
+  for (const item of raw) {
+    if (!item) continue;
+    // 部分來源寫成「演員(代表作) 演員(代表作)」，代表作不是姓名的一部分。
+    const text = String(item)
+      .replace(/《[^》]{1,80}》/g, '')
+      .replace(/[（(][^（）()]{1,40}[）)]/g, '')
+      .trim();
+    const parts = /[、,，\/\r\n]/.test(text)
+      ? text.split(/[、,，\/\r\n]+/)
+      : text.split(/\s{2,}|\s+(?=[\u3400-\u9fff]{2,})/);
+    for (const part of parts) {
+      const name = part.replace(/\s+/g, ' ').trim();
+      if (name && !out.includes(name)) out.push(name);
+    }
+  }
+  return out;
+}
+
 // ---------- 通用禮貌 fetch（支援 POST，給 atmovies 搜尋用；politeFetch 只支援 GET） ----------
 
 let lastCustomFetch = 0;
@@ -133,6 +155,8 @@ async function fetchShowtimesBootstrap() {
       // duration 欄位實測是「秒」：橡樹街末日 6000/60=100min（喜樂時代自報 99min）、
       // 陰兒房 6360/60=106min（喜樂時代同為 106min）、奧德賽 10320/60=172min（喜樂時代同為 172min）
       runtimeMin: typeof p.duration === 'number' ? Math.round(p.duration / 60) : null,
+      directors: cleanPeople(p.meta?.directors),
+      cast: cleanPeople(p.meta?.authors),
     });
   }
   console.log(`  [showtimes] bootstrap ${out.length} 部片（含特映場/未上映）`);
@@ -154,12 +178,16 @@ async function fetchCenturyAsia() {
   for (const m of movies) {
     let synopsis = null;
     let runtimeMin = null;
+    let directors = [];
+    let cast = [];
     try {
       const info = await politeFetch(`https://www.centuryasia.com.tw/Movie/GetMovieInfo/${m.programid}`, { asJson: true });
       const d = info?.Data;
       if (d) {
         synopsis = d.Introduction || null;
         runtimeMin = d.ShowTimes ? parseInt(d.ShowTimes, 10) || null : null;
+        directors = cleanPeople(d.Director);
+        cast = cleanPeople(d.Actors);
       }
     } catch (e) {
       console.log(`  [centuryasia] GetMovieInfo(${m.programid}) 失敗: ${e.message}`);
@@ -172,6 +200,8 @@ async function fetchCenturyAsia() {
       synopsis,
       rating: m.filmleveldesc || null,
       runtimeMin,
+      directors,
+      cast,
     });
   }
   console.log(`  [centuryasia] ${out.length} 部片`);
@@ -224,9 +254,10 @@ async function fetchAmbassador() {
 
   for (const [mid, rec] of byMid) {
     let synopsis = null;
+    let detailHtml = '';
     try {
-      const html = await politeFetch(`https://www.ambassador.com.tw/home/MovieContent?MID=${mid}&DT=${dt}`);
-      const m = html.match(/<div class='rating-box'>[\s\S]*?<\/div><p>([\s\S]*?)<\/p>/);
+      detailHtml = await politeFetch(`https://www.ambassador.com.tw/home/MovieContent?MID=${mid}&DT=${dt}`);
+      const m = detailHtml.match(/<div class='rating-box'>[\s\S]*?<\/div><p>([\s\S]*?)<\/p>/);
       synopsis = m ? m[1].trim() : null;
     } catch (e) {
       console.log(`  [ambassador] MovieContent(${mid}) 失敗: ${e.message}`);
@@ -239,6 +270,8 @@ async function fetchAmbassador() {
       synopsis,
       rating: rec.rating,
       runtimeMin: rec.runtimeMin,
+      directors: [],
+      cast: cleanPeople((detailHtml.match(/主要演員[：:]\s*([^<]+)/) || [])[1]),
     });
   }
   return out;
@@ -281,6 +314,8 @@ async function fetchLux() {
     const rating = (html.match(/級別\s*\|\s*([^<\s]+)/) || [])[1] || null;
     const synM = html.match(/<\/h3>\s*<p>([\s\S]*?)<\/p>/);
     const synopsis = synM ? synM[1].trim() : null;
+    const directors = cleanPeople((h3s.find((s) => /^導演\s*[|｜]/.test(s)) || '').replace(/^導演\s*[|｜]\s*/, ''));
+    const cast = cleanPeople((h3s.find((s) => /^演員\s*[|｜]/.test(s)) || '').replace(/^演員\s*[|｜]\s*/, ''));
     out.push({
       source: 'lux',
       sourceTitle: title,
@@ -289,6 +324,8 @@ async function fetchLux() {
       synopsis,
       rating,
       runtimeMin,
+      directors,
+      cast,
     });
   }
   return out;
@@ -351,13 +388,50 @@ async function fetchMiranew() {
       synopsis: mv.Description || null,
       rating: ratingFromTitle || mv.Rate || null,
       runtimeMin: typeof mv.Duration === 'number' ? mv.Duration : parseInt(mv.Duration, 10) || null,
+      directors: cleanPeople(mv.Director),
+      cast: cleanPeople(mv.Cast),
     });
   }
   console.log(`  [miranew] ${ids.length} 部片（首頁 NowShowing 清單）`);
   return out;
 }
 
-// ---------- 來源 6：開眼電影網（atmovies）——最後防線，逐片名查 ----------
+// ---------- 來源 6：美麗華大直 ----------
+
+async function fetchMiramar() {
+  const out = [];
+  let payload;
+  try {
+    payload = await politeFetch('https://www.miramarcinemas.tw/api/Booking/GetMovie/', {
+      asJson: true,
+      method: 'POST',
+      headers: {
+        Referer: 'https://www.miramarcinemas.tw/booking/timetable',
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (e) {
+    console.log(`  [miramar] 場次 API 失敗: ${e.message}`);
+    return out;
+  }
+  for (const mv of payload?.results?.mMovies || []) {
+    out.push({
+      source: 'miramar',
+      sourceTitle: mv.TitleAlt || mv.Title,
+      en: cleanEn(mv.Title),
+      posterUrl: mv.GraphicUrl || null,
+      synopsis: mv.ShortSynopsis || mv.Synopsis || null,
+      rating: mv.Rating || null,
+      runtimeMin: parseInt(mv.RunTime, 10) || null,
+      directors: cleanPeople(mv.Director),
+      cast: cleanPeople(mv.Cast),
+    });
+  }
+  console.log(`  [miramar] ${out.length} 部片`);
+  return out;
+}
+
+// ---------- 來源 7：開眼電影網（atmovies）——最後防線，逐片名查 ----------
 
 // 開眼搜尋是舊版 ASP.NET 表單：POST 到 search.atmovies.com.tw/search/，且「一定要帶 Referer」，
 // 沒有 Referer 一律回「No Result~~!」（即使查熱門強片也一樣，實測驗證過）。
@@ -377,7 +451,7 @@ async function atmoviesSearch(query) {
     return null;
   }
   if (/No Result/i.test(html)) return null;
-  const m = html.match(/<li class="movie">[\s\S]*?href="\/F\/([a-z0-9]+)\/"[\s\S]*?<p class="title-zh">([^<]*)<\/p>/i);
+  const m = html.match(/href="\/F\/([a-z0-9]+)\/?"[^>]*class="title big">\s*([^<]*)/i);
   return m ? { code: m[1], title: m[2].trim() } : null;
 }
 
@@ -400,10 +474,17 @@ async function atmoviesDetail(code) {
   const html = await politeCustom(`https://www.atmovies.com.tw/movie/${code}/`);
   const posterM = html.match(/class="image Poster"[\s\S]*?<img src="([^"]+)"/);
   const runtimeM = html.match(/片長[：:]\s*(\d+)\s*分/);
+  const creditNames = (label) => {
+    const m = html.match(new RegExp(`<li><B>${label}：</B>([\\s\\S]*?)(?=<li><B>|</UL>)`));
+    if (!m) return [];
+    return cleanPeople([...m[1].matchAll(/<a[^>]*>([\s\S]*?)<\/a>/g)].map((x) => x[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()));
+  };
   return {
     posterUrl: posterM ? `https://www.atmovies.com.tw${posterM[1]}` : null,
     synopsis: extractAtmoviesSynopsis(html),
     runtimeMin: runtimeM ? parseInt(runtimeM[1], 10) : null,
+    directors: creditNames('導演'),
+    cast: creditNames('演員'),
   };
 }
 
@@ -412,6 +493,9 @@ async function atmoviesLookup(rawTitle) {
   if (!query) return null;
   const found = await atmoviesSearch(query);
   if (!found) return null;
+  const wantedKey = looseKey(query);
+  const foundKey = looseKey(found.title);
+  if (!wantedKey || !foundKey || (!wantedKey.includes(foundKey) && !foundKey.includes(wantedKey))) return null;
   let detail;
   try {
     detail = await atmoviesDetail(found.code);
@@ -419,25 +503,31 @@ async function atmoviesLookup(rawTitle) {
     console.log(`  [atmovies] 詳情頁失敗［${rawTitle}］(${found.code}): ${e.message}`);
     return null;
   }
-  if (!detail.posterUrl && !detail.synopsis) return null;
+  if (!detail.posterUrl && !detail.synopsis && !detail.directors.length && !detail.cast.length) return null;
   return {
     en: null,
     posterUrl: detail.posterUrl,
     synopsis: detail.synopsis,
     rating: null, // 開眼詳情頁沒有台灣分級文字，靠 data/*.json 自帶的 rating 欄位補
     runtimeMin: detail.runtimeMin,
+    directors: detail.directors,
+    cast: detail.cast,
     metaSource: 'atmovies',
   };
 }
 
 // ---------- 合併 ----------
 
-// 來源優先權：秀泰 bootstrap 簡介品質最好放最前面，其餘 4 個既有來源其次，
-// 開眼(atmovies) 只在前 5 個都查無時才會被叫到，理論上不會跟其他來源同組競爭。
-const SOURCE_PRIORITY = { showtimes: 6, centuryasia: 5, ambassador: 4, lux: 3, miranew: 2, atmovies: 1 };
+// 來源優先權：秀泰 bootstrap 簡介品質最好放最前面，其餘官方來源其次，
+// 開眼(atmovies) 只在前面的批次來源都查無時才會被叫到。
+const SOURCE_PRIORITY = { showtimes: 7, centuryasia: 6, ambassador: 5, miramar: 4, lux: 3, miranew: 2, atmovies: 1 };
 
 function completeness(rec) {
-  return ['posterUrl', 'synopsis', 'rating', 'runtimeMin', 'en'].filter((k) => rec[k]).length;
+  return ['posterUrl', 'synopsis', 'rating', 'runtimeMin', 'en', 'directors', 'cast'].filter((k) => rec[k]?.length || rec[k]).length;
+}
+
+function hasValue(value) {
+  return Array.isArray(value) ? value.length > 0 : value != null && value !== '';
 }
 
 function mergeGroup(candidates) {
@@ -446,12 +536,12 @@ function mergeGroup(candidates) {
     return p !== 0 ? p : completeness(b) - completeness(a);
   });
   const base = sorted[0];
-  const merged = { en: base.en, posterUrl: base.posterUrl, synopsis: base.synopsis, rating: base.rating, runtimeMin: base.runtimeMin };
+  const merged = { en: base.en, posterUrl: base.posterUrl, synopsis: base.synopsis, rating: base.rating, runtimeMin: base.runtimeMin, directors: base.directors || [], cast: base.cast || [] };
   const sources = new Set([base.source]);
   for (const c of sorted.slice(1)) {
     let contributed = false;
-    for (const k of ['en', 'posterUrl', 'synopsis', 'rating', 'runtimeMin']) {
-      if (!merged[k] && c[k]) {
+    for (const k of ['en', 'posterUrl', 'synopsis', 'rating', 'runtimeMin', 'directors', 'cast']) {
+      if (!hasValue(merged[k]) && hasValue(c[k])) {
         merged[k] = c[k];
         contributed = true;
       }
@@ -578,8 +668,9 @@ async function main() {
     ...(await fetchAmbassador()),
     ...(await fetchLux()),
     ...(await fetchMiranew()),
+    ...(await fetchMiramar()),
   ];
-  console.log(`共 ${candidates.length} 筆來源候選資料（6 個來源中的前 5 個，皆為批次端點）`);
+  console.log(`共 ${candidates.length} 筆官方來源候選資料（6 個批次來源）`);
 
   const groups = new Map();
   for (const c of candidates) {
@@ -590,9 +681,9 @@ async function main() {
   }
   const mergedByKey = new Map();
   for (const [lk, list] of groups) mergedByKey.set(lk, mergeGroup(list));
-  console.log(`前 5 個來源合併後：${mergedByKey.size} 個不重複片名群組`);
+  console.log(`官方批次來源合併後：${mergedByKey.size} 個不重複片名群組`);
 
-  // 找出前 5 個來源（含互相包含的寬鬆比對）仍查無的片名，逐一查開眼補
+  // 找出官方批次來源（含互相包含的寬鬆比對）仍查無的片名，逐一查開眼補
   const missingLks = new Set();
   const repTitleOf = new Map(); // lk -> 一個代表性原始片名，當開眼搜尋關鍵字
   for (const title of wantedTitles) {
@@ -601,7 +692,7 @@ async function main() {
     if (!repTitleOf.has(lk)) repTitleOf.set(lk, title);
     if (!resolveKey(lk, mergedByKey)) missingLks.add(lk);
   }
-  console.log(`前 5 個來源查無、需查開眼補的片名群組：${missingLks.size} 個`);
+  console.log(`官方批次來源查無、需查開眼補的片名群組：${missingLks.size} 個`);
 
   console.log('查開眼電影網（atmovies）補齊缺欄位…');
   let atmoviesHit = 0;
@@ -647,6 +738,8 @@ async function main() {
       synopsis,
       rating,
       runtimeMin: rec.runtimeMin || null,
+      directors: (rec.directors || []).slice(0, 3),
+      cast: (rec.cast || []).slice(0, 8),
       metaSource: rec.metaSource,
     };
     if (thumb) entry.thumb = thumb;

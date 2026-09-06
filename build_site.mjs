@@ -25,9 +25,11 @@ const SOURCE_NAMES = {
   centuryasia: '喜樂時代',
   skcinemas: '新光',
   miranew: '美麗新',
+  miramar: '美麗華大直',
   in89: 'in89',
   atmovies: '開眼(藝文館)',
   arthouse: '光點華山/府中15',
+  arthouse2: '真善美/光點台北/TFAI',
   lux: '樂聲',
 };
 
@@ -341,6 +343,8 @@ for (let i = 0; i < movies.list.length; i++) {
   // 卡片上只顯示兩行，截短可觀地縮小內嵌體積
   if (m.synopsis) entry.s = m.synopsis.length > 88 ? m.synopsis.slice(0, 88) + '…' : m.synopsis;
   if (m.runtimeMin) entry.d = m.runtimeMin;
+  if (m.directors?.length) entry.r = m.directors.slice(0, 3).join('、');
+  if (m.cast?.length) entry.c = m.cast.slice(0, 6).join('、');
   const pi = sprite?.index.get(m.thumb);
   if (pi != null) entry.i = pi;
   if (Object.keys(entry).length) metaByIdx[i] = entry;
@@ -384,6 +388,8 @@ const serializedPayload = JSON.stringify(payload)
 const withGeo = cinemaGeo.filter(Boolean).length;
 const withPoster = Object.values(metaByIdx).filter((m) => m.i != null).length;
 const withSyn = Object.values(metaByIdx).filter((m) => m.s).length;
+const withDirector = Object.values(metaByIdx).filter((m) => m.r).length;
+const withCast = Object.values(metaByIdx).filter((m) => m.c).length;
 const sources = [...new Set(merged.map((r) => r.source))].map((s) => SOURCE_NAMES[s] || s).join('、');
 const generated = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false });
 
@@ -559,6 +565,6 @@ await writeFile(`${root}out/sitemap.xml`, sitemap);
 await writeFile(`${root}out/robots.txt`, `User-agent: *\nAllow: /\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 console.log(
   `\nout/index.html: ${sessionCount} 場次 / ${cinemas.list.length} 影城 / ${movies.list.length} 部片` +
-    `（${mergedTitles} 部跨影城異名合併、${eventFolded} 個特別場歸戶、海報 ${withPoster}、簡介 ${withSyn}、座標 ${withGeo}）` +
+    `（${mergedTitles} 部跨影城異名合併、${eventFolded} 個特別場歸戶、海報 ${withPoster}、簡介 ${withSyn}、導演 ${withDirector}、演員 ${withCast}、座標 ${withGeo}）` +
     `, ${(html.length / 1024 / 1024).toFixed(2)} MB；另產生 ${sitemapPaths.length - 1} 個索引頁`,
 );
