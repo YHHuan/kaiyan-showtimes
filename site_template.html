@@ -148,7 +148,8 @@
     color: var(--ink2);
     font-family: inherit;
     font-size: 13px;
-    padding: 4px 12px;
+    padding: 6px 12px;
+    min-height: 36px;
     cursor: pointer;
   }
   .seg button[aria-pressed="true"] { background: var(--ink); color: var(--sheet); font-weight: 700; }
@@ -157,7 +158,8 @@
     background: var(--sheet);
     color: var(--ink);
     border-radius: 3px;
-    padding: 4px 8px;
+    padding: 6px 8px;
+    min-height: 36px;
     font-size: 13px;
     font-family: inherit;
   }
@@ -168,7 +170,8 @@
     background: transparent;
     color: var(--ink2);
     border-radius: 3px;
-    padding: 4px 10px;
+    padding: 6px 10px;
+    min-height: 36px;
     font-size: 13px;
     font-family: inherit;
     cursor: pointer;
@@ -181,6 +184,9 @@
   }
 
   .row-extra { margin-top: 6px; padding-top: 6px; border-top: 1px dotted var(--line); }
+  .row-extra[hidden], .filter-backdrop[hidden] { display: none; }
+  .filter-sheet-head { display: none; }
+  .filter-backdrop { display: none; }
   #more-filters[aria-expanded="true"] { border-color: var(--ink2); color: var(--ink); }
   .summary { color: var(--ink2); font-size: 13px; margin: 16px 0 4px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
   .summary b { color: var(--ink); font-weight: 700; }
@@ -418,7 +424,61 @@
   @media (max-width: 640px) {
     body { font-size: 15px; }
     .wrap { padding: 0 14px 60px; }
-    .controls { margin: 0 -14px; padding: 8px 14px; }
+    .controls { margin: 0 -14px; padding: 7px 14px; transition: padding .15s ease; }
+    .dates { padding-bottom: 6px; }
+    .day { min-height: 44px; padding-top: 4px; padding-bottom: 4px; }
+    .row-main {
+      display: grid;
+      grid-template-columns: minmax(82px, auto) minmax(0, 1fr) auto;
+      gap: 6px;
+    }
+    .seg { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); }
+    .seg button, select, .search, .toggle { min-height: 44px; }
+    .seg button { padding: 7px 9px; }
+    #area { grid-column: 1; min-width: 0; max-width: 112px; }
+    .search { grid-column: 2; width: 100%; min-width: 0; }
+    #more-filters { grid-column: 3; white-space: nowrap; }
+    /* 日期與檢視方式在頁首看得到即可；開始讀場次後，只留下最常用的一列。 */
+    .controls.is-compact .dates,
+    .controls.is-compact .seg { display: none; }
+    .row-extra:not([hidden]) {
+      position: fixed;
+      z-index: 42;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      max-height: min(78vh, 620px);
+      overflow-y: auto;
+      margin: 0;
+      padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+      border-top: 2px solid var(--rule);
+      background: var(--sheet);
+      box-shadow: 0 -12px 36px rgba(0, 0, 0, .22);
+    }
+    .row-extra > select,
+    .row-extra > button { width: 100%; min-width: 0; }
+    .filter-sheet-head {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 8px;
+    }
+    .filter-sheet-head b { font-family: "Noto Serif TC", serif; font-size: 18px; }
+    #close-filters { min-height: 40px; }
+    .filter-backdrop:not([hidden]) {
+      position: fixed;
+      z-index: 41;
+      inset: 0;
+      display: block;
+      border: 0;
+      background: rgba(0, 0, 0, .42);
+    }
+    body.filters-open { overflow: hidden; }
     h1 { font-size: 26px; }
     h2 { font-size: 19px; }
     .stats { display: none; }
@@ -446,25 +506,27 @@
 
   <div class="controls">
     <div class="dates" id="dates" role="group" aria-label="日期"></div>
-    <!-- 控制項分兩層：常用的永遠可見，低頻條件收進「更多篩選」。
+    <!-- 控制項分兩層：常用的永遠可見，低頻條件收進「篩選」。
          十個同權重的控制項擠在一起時，手機上會佔掉半個畫面，而且每項看起來一樣重要。 -->
-    <div class="row2">
+    <div class="row2 row-main">
       <div class="seg" role="group" aria-label="檢視方式">
-        <button id="vMovie" aria-pressed="true">按電影</button>
-        <button id="vCinema" aria-pressed="false">按戲院</button>
-        <button id="vPlan" aria-pressed="false">幫我排</button>
+        <button id="vMovie" aria-pressed="true">電影</button>
+        <button id="vCinema" aria-pressed="false">戲院</button>
+        <button id="vPlan" aria-pressed="false">依時間找</button>
       </div>
       <select id="area" aria-label="地區"></select>
-      <select id="sort" aria-label="戲院排序">
-        <option value="area">依地區</option>
-        <option value="next">最快開演</option>
-        <option value="dist">距離最近</option>
-        <option value="price">票價最低</option>
-      </select>
-      <input class="search" id="q" type="search" placeholder="搜尋片名或戲院…">
-      <button class="toggle" id="more-filters" aria-expanded="false">更多篩選</button>
+      <input class="search" id="q" type="search" placeholder="片名、影城、地區或 4D…">
+      <button class="toggle" id="more-filters" aria-expanded="false" aria-controls="extra">篩選</button>
     </div>
+    <button class="filter-backdrop" id="filter-backdrop" type="button" aria-label="關閉篩選" hidden></button>
     <div class="row2 row-extra" id="extra" hidden>
+      <div class="filter-sheet-head"><b>篩選場次</b><button class="toggle" id="close-filters" type="button">完成</button></div>
+      <select id="sort" aria-label="戲院排序">
+        <option value="area">排序：依地區</option>
+        <option value="next">排序：最快開演</option>
+        <option value="dist">排序：距離最近</option>
+        <option value="price">排序：票價最低</option>
+      </select>
       <select id="lang" aria-label="配音語言"></select>
       <select id="format" aria-label="影廳格式"></select>
       <select id="slot" aria-label="時段">
@@ -822,9 +884,82 @@ var DATA = __DATA__;
     }
   }
 
+  // 搜尋不是資料庫欄位的逐字比對。使用者常會一次輸入「蜘蛛人 4D 台中」，
+  // 因此先抽出地區與影廳格式，再讓剩下的字詞比對片名、影城、廳名與原始標籤。
+  // 特別注意：泛稱 4D 只包含會動的 4DX／MX4D，不能把 ULTRA 3D 誤報成 4D。
+  function searchNorm(v) {
+    return String(v || "").normalize("NFKC").toLowerCase().replace(/臺/g, "台");
+  }
+  function searchCompact(v) {
+    return searchNorm(v).replace(/[^\p{Letter}\p{Number}]+/gu, "");
+  }
+
+  function parseSearchQuery(q) {
+    var work = searchCompact(q);
+    var format = null;
+    var formatAliases = [
+      ["dolbycinema", "Dolby Cinema", ["Dolby Cinema"]],
+      ["ultra3d", "ULTRA 3D", ["ULTRA 3D"]],
+      ["mx4d", "MX4D", ["MX4D"]],
+      ["4dx", "4DX", ["4DX"]],
+      ["screenx", "ScreenX", ["ScreenX"]],
+      ["imax", "IMAX", ["IMAX"]],
+      ["atmos", "Dolby Atmos", ["Dolby Atmos"]],
+      ["4d", "4D", ["4DX", "MX4D"]],
+      ["3d", "3D", ["3D"]]
+    ];
+    for (var fi = 0; fi < formatAliases.length; fi++) {
+      if (work.indexOf(formatAliases[fi][0]) < 0) continue;
+      format = { label: formatAliases[fi][1], kinds: formatAliases[fi][2] };
+      work = work.replace(formatAliases[fi][0], "");
+      break;
+    }
+
+    // 「台中」可安全對應台中市；「新竹／嘉義」則保留市、縣兩種可能。
+    var aliasMap = {};
+    areas.forEach(function (area) {
+      var full = searchCompact(area);
+      var short = full.replace(/[市縣]$/, "");
+      if (!aliasMap[full]) aliasMap[full] = [];
+      if (aliasMap[full].indexOf(area) < 0) aliasMap[full].push(area);
+      if (short.length >= 2) {
+        if (!aliasMap[short]) aliasMap[short] = [];
+        if (aliasMap[short].indexOf(area) < 0) aliasMap[short].push(area);
+      }
+    });
+    var areaIntent = null;
+    Object.keys(aliasMap).sort(function (a, b) { return b.length - a.length; }).some(function (alias) {
+      if (work.indexOf(alias) < 0) return false;
+      areaIntent = aliasMap[alias];
+      work = work.replace(alias, "");
+      return true;
+    });
+
+    return { raw: q, text: work, areas: areaIntent, format: format };
+  }
+
+  function searchMatches(r, intent) {
+    if (intent.areas && intent.areas.indexOf(C[r[0]][1]) < 0) return false;
+    var tag = T[r[4]] || "", hall = H[r[3]] || "";
+    var formats = formatOf(tag, hall);
+    if (intent.format) {
+      if (intent.format.label === "ULTRA 3D") {
+        if (searchCompact(tag + hall).indexOf("ultra3d") < 0) return false;
+      } else if (!intent.format.kinds.some(function (kind) { return formats.indexOf(kind) >= 0; })) {
+        return false;
+      }
+    }
+    if (!intent.text) return true;
+    var corpus = searchCompact([
+      M[r[1]][0], M[r[1]][1], C[r[0]][0], C[r[0]][1], tag, hall, formats.join(" ")
+    ].join(" "));
+    return corpus.indexOf(intent.text) >= 0;
+  }
+
   function filtered() {
     var di = D.indexOf(state.date);
     var q = state.q;
+    var searchIntent = q ? parseSearchQuery(q) : null;
     var out = [];
     for (var i = 0; i < ROWS.length; i++) {
       var r = ROWS[i];
@@ -846,7 +981,7 @@ var DATA = __DATA__;
         if (!favMatch) continue;
       }
       if (!state.showPast && D[r[2]] === NOW.date && r[5] < NOW.mins) continue;
-      if (q && M[r[1]][0].toLowerCase().indexOf(q) < 0 && C[r[0]][0].toLowerCase().indexOf(q) < 0) continue;
+      if (searchIntent && !searchMatches(r, searchIntent)) continue;
       out.push(r);
     }
     return out;
@@ -1460,6 +1595,11 @@ var DATA = __DATA__;
     document.getElementById("tSoon").setAttribute("aria-pressed", String(state.showPast));
     document.getElementById("tEnd").setAttribute("aria-pressed", String(state.showEnd));
     document.getElementById("planner").hidden = state.view !== "plan";
+    var extraCount = (state.sort !== "area" ? 1 : 0) + (state.slot !== "all" ? 1 : 0)
+      + (state.lang !== "all" ? 1 : 0) + (state.format !== "all" ? 1 : 0)
+      + (state.onlyEvent ? 1 : 0) + (state.onlyFav ? 1 : 0) + (state.showPast ? 1 : 0)
+      + (state.showEnd ? 1 : 0) + (myPos ? 1 : 0);
+    document.getElementById("more-filters").textContent = extraCount ? "篩選 " + extraCount : "篩選";
 
     var baseRows = filtered();
     var rows = state.view === "plan" ? baseRows.filter(planFits) : baseRows;
@@ -1505,10 +1645,16 @@ var DATA = __DATA__;
 
     if (!rows.length) {
       var e = el("div", "empty");
-      var matchedCinemas = state.q ? C.filter(function (c) { return c[0].toLowerCase().indexOf(state.q) >= 0; }) : [];
+      var emptyIntent = state.q ? parseSearchQuery(state.q) : null;
+      var wantsMotion = emptyIntent && emptyIntent.format && emptyIntent.format.label === "4D";
+      var qCompact = state.q ? searchCompact(state.q) : "";
+      var matchedCinemas = state.q ? C.filter(function (c) { return searchCompact(c[0]).indexOf(qCompact) >= 0; }) : [];
       e.appendChild(el("b", null, state.view === "plan" ? "這段時間沒有合適場次"
+        : wantsMotion ? "目前條件找不到真正的 4D 場次"
         : matchedCinemas.length ? "有收錄「" + matchedCinemas.map(function (c) { return c[0]; }).join("、") + "」" : "這個條件查不到場次"));
-      e.appendChild(el("div", null, matchedCinemas.length
+      e.appendChild(el("div", null, wantsMotion
+        ? "4D 只會比對 4DX／MX4D；ULTRA 3D 是 3D 規格，不會混在一起。可換日期或放寬其他條件再試。"
+        : matchedCinemas.length
         ? "目前日期或篩選條件沒有可顯示場次；部分獨立戲院的備援來源只提供當天資料。"
         : state.view === "plan" && state.maxDist !== "all" && !myPos
         ? "要使用距離上限，請先允許「離我最近」取得定位。"
@@ -1608,11 +1754,46 @@ var DATA = __DATA__;
 
   var extraEl = document.getElementById("extra");
   var moreBtn = document.getElementById("more-filters");
+  var backdropEl = document.getElementById("filter-backdrop");
+  var mobileQuery = window.matchMedia("(max-width: 640px)");
   function setExtra(open) {
     extraEl.hidden = !open;
     moreBtn.setAttribute("aria-expanded", String(open));
+    var modal = open && mobileQuery.matches;
+    backdropEl.hidden = !modal;
+    document.body.classList.toggle("filters-open", modal);
+    if (modal) {
+      extraEl.setAttribute("role", "dialog");
+      extraEl.setAttribute("aria-modal", "true");
+      extraEl.setAttribute("aria-label", "篩選場次");
+    } else {
+      extraEl.removeAttribute("role");
+      extraEl.removeAttribute("aria-modal");
+      extraEl.removeAttribute("aria-label");
+    }
   }
   moreBtn.onclick = function () { setExtra(extraEl.hidden); };
+  document.getElementById("close-filters").onclick = function () { setExtra(false); moreBtn.focus(); };
+  backdropEl.onclick = function () { setExtra(false); moreBtn.focus(); };
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !extraEl.hidden) { setExtra(false); moreBtn.focus(); }
+  });
+  mobileQuery.addEventListener("change", function () { if (!extraEl.hidden) setExtra(true); });
+
+  // 手機開始往下閱讀內容時，把日期與模式切換收起，固定列只保留地區、搜尋和篩選。
+  var controlsEl = document.querySelector(".controls");
+  var headerEl = document.querySelector("header");
+  var scrollQueued = false;
+  function updateCompactControls() {
+    scrollQueued = false;
+    controlsEl.classList.toggle("is-compact", mobileQuery.matches && window.scrollY > headerEl.offsetHeight);
+  }
+  window.addEventListener("scroll", function () {
+    if (scrollQueued) return;
+    scrollQueued = true;
+    window.requestAnimationFrame(updateCompactControls);
+  }, { passive: true });
+  mobileQuery.addEventListener("change", updateCompactControls);
   document.getElementById("share").onclick = function () {
     var btn = this;
     var url = location.href;
@@ -1678,7 +1859,7 @@ var DATA = __DATA__;
 
   readUrl();
   // 從網址進來時若已帶進階條件，把面板展開——否則使用者看不出結果為什麼被篩過
-  if (state.lang !== "all" || state.format !== "all" || state.slot !== "all" || state.onlyEvent || state.onlyFav || state.showPast || state.showEnd) setExtra(true);
+  if (!mobileQuery.matches && (state.lang !== "all" || state.format !== "all" || state.slot !== "all" || state.onlyEvent || state.onlyFav || state.showPast || state.showEnd)) setExtra(true);
   document.getElementById("slot").value = state.slot;
   document.getElementById("lang").value = state.lang;
   document.getElementById("format").value = state.format;
@@ -1688,6 +1869,7 @@ var DATA = __DATA__;
   document.getElementById("planEnd").value = state.planEnd;
   document.getElementById("maxPrice").value = state.maxPrice;
   document.getElementById("maxDist").value = state.maxDist;
+  updateCompactControls();
   render();
 })();
 </script>

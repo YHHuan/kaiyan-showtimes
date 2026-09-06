@@ -43,7 +43,11 @@ page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()
 
 async function ensureVisibleMovieCards() {
   if (await page.locator('.favbtn').count()) return;
-  if (await page.locator('#tSoon').getAttribute('aria-pressed') !== 'true') await page.locator('#tSoon').click();
+  if (await page.locator('#tSoon').getAttribute('aria-pressed') !== 'true') {
+    if (await page.locator('#extra').getAttribute('hidden') !== null) await page.locator('#more-filters').click();
+    await page.locator('#tSoon').click();
+    await page.locator('#close-filters').click();
+  }
   await page.locator('.favbtn').first().waitFor({ state: 'visible' });
 }
 
@@ -52,6 +56,18 @@ try {
   if (!response?.ok()) throw new Error(`首頁 HTTP ${response?.status()}`);
   if (!(await page.title()).includes('開演')) throw new Error('首頁 title 不正確');
   if (await page.locator('#format option').count() < 2) throw new Error('影廳格式選項未產生');
+  if (await page.locator('#extra').evaluate((el) => getComputedStyle(el).display) !== 'none') {
+    throw new Error('「篩選」面板在初始狀態沒有隱藏');
+  }
+  for (const selector of ['#vMovie', '#area', '#q', '#more-filters']) {
+    const box = await page.locator(selector).boundingBox();
+    if (!box || box.height < 44) throw new Error(`手機觸控目標過小：${selector} ${box?.height || 0}px`);
+  }
+  await page.locator('#more-filters').click();
+  if (await page.locator('#extra').getAttribute('role') !== 'dialog' || await page.locator('#filter-backdrop').isHidden()) {
+    throw new Error('手機篩選面板沒有以底部對話框開啟');
+  }
+  await page.locator('#close-filters').click();
   const areaOptions = (await page.locator('#area option').allTextContents()).filter((x) => x !== '全部地區');
   const geographicOrder = ['台北市', '新北市', '基隆市', '桃園市', '新竹市', '新竹縣', '苗栗縣', '台中市', '彰化縣', '南投縣', '雲林縣', '嘉義市', '嘉義縣', '台南市', '高雄市', '屏東縣', '宜蘭縣', '花蓮縣', '台東縣', '澎湖縣', '金門縣', '連江縣'];
   const expectedAreas = geographicOrder.filter((x) => areaOptions.includes(x));
@@ -77,6 +93,41 @@ try {
   await ensureVisibleMovieCards();
   const viewport = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
   if (viewport.scrollWidth > viewport.width + 1) throw new Error(`手機版出現水平溢出：${viewport.scrollWidth}/${viewport.width}`);
+  await page.evaluate(() => scrollTo(0, Math.min(700, document.documentElement.scrollHeight - innerHeight)));
+  await page.waitForTimeout(100);
+  const compactControls = await page.locator('.controls').boundingBox();
+  if (!compactControls || compactControls.height > 70 || await page.locator('.controls').getAttribute('class') !== 'controls is-compact') {
+    throw new Error(`捲動後控制列沒有縮小：${compactControls?.height || 0}px`);
+  }
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.waitForTimeout(100);
+
+  // 搜尋框要看得懂「片名＋地區＋格式」，即使三者沒有空格。從本輪資料動態挑一場，
+  // 避免把測試綁死在某部電影或某一天；4D 泛稱則會選到真正的 4DX／MX4D。
+  const compound = await page.evaluate(() => {
+    for (const group of DATA.packed.split(';')) {
+      const f = group.split(',');
+      const ci = parseInt(f[0], 36), mi = parseInt(f[1], 36), di = parseInt(f[2], 36);
+      const hi = parseInt(f[3], 36), ti = parseInt(f[4], 36);
+      const raw = `${DATA.tags[ti] || ''} ${DATA.halls[hi] || ''}`;
+      let format = null;
+      if (/MX4D|4DX/i.test(raw)) format = '4D';
+      else if (/DOLBY\s*CINEMA/i.test(raw)) format = 'Dolby Cinema';
+      else if (/IMAX/i.test(raw)) format = 'IMAX';
+      else if (/SCREEN\s*X/i.test(raw)) format = 'ScreenX';
+      if (!format) continue;
+      const area = DATA.cinemas[ci][1] || '';
+      return { di, query: `${DATA.movies[mi][0]}${format}${area.replace(/[市縣]$/, '')}` };
+    }
+    return null;
+  });
+  if (!compound) throw new Error('找不到可測試自然語句搜尋的特殊影廳場次');
+  await page.locator('.day').nth(compound.di).click();
+  await page.locator('#q').fill(compound.query);
+  await page.locator('#q').dispatchEvent('input');
+  if (!await page.locator('.card').count()) throw new Error(`自然語句搜尋沒有找到場次：${compound.query}`);
+  await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await ensureVisibleMovieCards();
   if (process.env.SCREENSHOT_DIR) {
     await mkdir(process.env.SCREENSHOT_DIR, { recursive: true });
     await page.screenshot({ path: resolve(process.env.SCREENSHOT_DIR, 'home-mobile.png') });
@@ -94,7 +145,11 @@ try {
   await page.locator('#planEnd').fill('04:00');
   await page.locator('#planEnd').dispatchEvent('change');
   // 測試可能在深夜執行；納入今天已開演場次，避免「當下沒有未開演場次」造成時間依賴。
-  if (await page.locator('#tSoon').getAttribute('aria-pressed') !== 'true') await page.locator('#tSoon').click();
+  if (await page.locator('#tSoon').getAttribute('aria-pressed') !== 'true') {
+    await page.locator('#more-filters').click();
+    await page.locator('#tSoon').click();
+    await page.locator('#close-filters').click();
+  }
   await page.locator('.planrow').first().waitFor({ state: 'visible' });
   if (process.env.SCREENSHOT_DIR) {
     await page.screenshot({ path: resolve(process.env.SCREENSHOT_DIR, 'planner-mobile.png') });
