@@ -41,6 +41,12 @@ const errors = [];
 page.on('pageerror', (err) => errors.push(err.message));
 page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
 
+async function ensureVisibleMovieCards() {
+  if (await page.locator('.favbtn').count()) return;
+  if (await page.locator('#tSoon').getAttribute('aria-pressed') !== 'true') await page.locator('#tSoon').click();
+  await page.locator('.favbtn').first().waitFor({ state: 'visible' });
+}
+
 try {
   const response = await page.goto(base, { waitUntil: 'domcontentloaded' });
   if (!response?.ok()) throw new Error(`首頁 HTTP ${response?.status()}`);
@@ -51,6 +57,7 @@ try {
   const expectedAreas = geographicOrder.filter((x) => areaOptions.includes(x));
   if (areaOptions.join('|') !== expectedAreas.join('|')) throw new Error(`縣市不是地理順序：${areaOptions.join('、')}`);
   if (!(await page.content()).includes('美麗華大直影城')) throw new Error('缺少美麗華大直影城');
+  await ensureVisibleMovieCards();
   if (await page.locator('.credits').count() < 1) throw new Error('電影卡片沒有導演／演員資料');
   await page.evaluate(() => {
     const option = document.createElement('option');
@@ -65,7 +72,9 @@ try {
   if (!(await page.locator('.empty b').innerText()).includes('有收錄「美麗華大直影城」')) {
     throw new Error('已收錄戲院的無場次提示不正確');
   }
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  // 回到不帶查詢參數的乾淨首頁；reload 會保留剛才的 q/v，深夜時可能沒有可收藏卡片。
+  await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await ensureVisibleMovieCards();
   const viewport = await page.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
   if (viewport.scrollWidth > viewport.width + 1) throw new Error(`手機版出現水平溢出：${viewport.scrollWidth}/${viewport.width}`);
   if (process.env.SCREENSHOT_DIR) {
