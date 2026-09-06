@@ -66,6 +66,14 @@ for (const f of (await readdir(`${root}data`)).filter((f) => f.endsWith('.json')
 // 今天（台北時區）之前的場次直接丟掉——府中15 之類會公布整月表，含已過去的日期
 const todayTPE = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' });
 
+// 少數官方地址只寫縣轄市（例如「花蓮市…」「台東市…」），來源抓取器取前三字後會
+// 誤把它當成縣市層級。建站時統一為實際縣名，避免篩選器出現「花蓮市／花蓮縣」兩組。
+const AREA_ALIASES = {
+  臺北市: '台北市', 臺中市: '台中市', 臺南市: '台南市', 臺東縣: '台東縣',
+  花蓮市: '花蓮縣', 台東市: '台東縣', 臺東市: '台東縣',
+};
+for (const r of all) r.area = AREA_ALIASES[r.area] || r.area;
+
 const seen = new Set();
 const merged = all.filter((r) => {
   if (!r.date || !r.time || !r.movie) return false;
