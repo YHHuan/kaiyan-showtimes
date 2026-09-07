@@ -69,5 +69,6 @@ export function parseAceShowtimes(html) {
   return records;
 }
 
-const html = await politeFetch(LIST_URL);
+// 王牌官網從 GitHub runner 偶爾首回應較慢，給它較寬裕的逾時並保留共用重試。
+const html = await politeFetch(LIST_URL, { timeoutMs: 60000 });
 await saveRecords(new URL('../data/acecinema.json', import.meta.url).pathname, parseAceShowtimes(html));
