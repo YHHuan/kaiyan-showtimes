@@ -27,6 +27,9 @@ const SHAPE = {
   atmovies:    { hallPct: [0, 100],  movies: [15, 90] },
   arthouse:    { hallPct: [50, 100], movies: [20, 200] },
   arthouse2:   { hallPct: [0, 100],  movies: [10, 150] },
+  acecinema:   { hallPct: [80, 100], movies: [4, 50] },
+  srm:         { hallPct: [80, 100], movies: [4, 50] },
+  ccmovie:     { hallPct: [80, 100], movies: [4, 50] },
 };
 
 const FLOOR = {
@@ -43,6 +46,9 @@ const FLOOR = {
   arthouse: 20,      // 光點華山＋府中15，實測約 180
   arthouse2: 25,     // 真善美＋光點台北＋TFAI（TFAI 走 OPENTIX），實測約 128
   lux: 15,           // 樂聲，官方只公布今明兩天，實測 80~190
+  acecinema: 10,     // 王牌映画一館，官方通常公布未來三天
+  srm: 10,           // 日日新一館，官方通常公布今明兩天
+  ccmovie: 10,       // 親親一館，官方通常公布今明兩天
 };
 const DROP_RATIO = 0.45;   // 跌到上一輪的 45% 以下＝可疑
 const FRESH_HOURS = 72;    // 超過這個時數沒更新就不採用

@@ -88,6 +88,9 @@ try {
   if (!(await page.locator('.empty b').innerText()).includes('有收錄「美麗華大直影城」')) {
     throw new Error('已收錄戲院的無場次提示不正確');
   }
+  // 測試用的假地區會由 onchange 寫入 localStorage；先恢復「全部」，否則 reload 後該 option
+  // 已不存在，頁面會維持零結果，接下來自然也沒有足夠高度可測 sticky 控制列。
+  await page.locator('#area').selectOption('全部');
   // 回到不帶查詢參數的乾淨首頁；reload 會保留剛才的 q/v，深夜時可能沒有可收藏卡片。
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await ensureVisibleMovieCards();

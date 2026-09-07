@@ -31,6 +31,9 @@ const SOURCE_NAMES = {
   arthouse: '光點華山/府中15',
   arthouse2: '真善美/光點台北/TFAI',
   lux: '樂聲',
+  acecinema: '王牌映画',
+  srm: '日日新',
+  ccmovie: '親親',
 };
 
 // ── 讀取場次 ────────────────────────────────────────────────

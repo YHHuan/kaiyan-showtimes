@@ -8,7 +8,9 @@
 //      本身就帶精確經緯度（2d=lng, 3d=lat），比地理編碼準，直接解析 iframe URL。
 //   3. 國賓（9館）、美麗新（2館）、府中15：官網是 server-rendered 純 HTML，地址現抓，
 //      再用 Nominatim 地理編碼補經緯度。
-//   4. 新光（5館）、喜樂時代（4館）、in89（2館）、樂聲（1館）、威秀含MUVIE（20館）、
+//   4. 台中地方影城：王牌由官網地址做 Nominatim POI 比對；日日新與親親官網直接內嵌
+//      Google Maps 精確座標，因此不必猜測或依賴第三方戲院名單。
+//   5. 新光（5館）、喜樂時代（4館）、in89（2館）、樂聲（1館）、威秀含MUVIE（20館）、
 //      以及其餘藝文/獨立館（10館）：官網不是 SPA 動態渲染就是沒有可靠端點，改用
 //      開眼電影網（atmovies.com.tw）的戲院場次頁——那頁面固定有純文字「地址:」「電話:」
 //      兩行，fetch/atmovies.mjs 已經在用同一批頁面抓場次，這裡只是多讀兩行地址資訊。
@@ -225,7 +227,67 @@ async function fetchArthouseOfficial() {
 }
 
 // ============================================================
-// 5. 其餘 42 館：改用開眼電影網（atmovies.com.tw）戲院場次頁的「地址:」「電話:」兩行。
+// 5. 台中地方影城：官網地址與內嵌地圖
+// ============================================================
+async function fetchTaichungLocalOfficial() {
+  const pages = [
+    {
+      name: '日日新影城',
+      url: 'https://srm.com.tw/product.php?_path=product_showtimes',
+      addressRe: /影城位置：<\/span>\s*([^<]+)/,
+      phoneRe: /(?:服務專線|聯絡電話|電話)[：:]?[^0-9]*(04[-\s]?\d{4}[-\s]?\d{4})/,
+    },
+    {
+      name: '親親影城',
+      url: 'https://www.ccmovie.com.tw/product.php?_path=product_showtimes',
+      addressRe: /影城位置：<\/span>\s*([^<]+)/,
+      phoneRe: /(?:服務專線|聯絡電話|電話)[：:]?[^0-9]*(04[-\s]?\d{4}[-\s]?\d{4})/,
+    },
+  ];
+
+  for (const page of pages) {
+    const html = await politeFetch(page.url);
+    const address = stripHtml(html.match(page.addressRe)?.[1]);
+    const phone = html.match(page.phoneRe)?.[1] || null;
+    // Google Maps embed 的 !2d經度!3d緯度由官網直接提供。
+    const map = html.match(/google\.com\/maps\/embed\?[^"']*!2d([\d.]+)!3d([\d.]+)/i);
+    addRecord(page.name, {
+      lat: map ? Number(map[2]) : null,
+      lng: map ? Number(map[1]) : null,
+      address: address || null,
+      phone,
+      transit: null,
+      source: map ? 'official-site (Google Maps 內嵌座標)' : 'official-site (查無座標)',
+      url: page.url,
+    });
+    console.log(`[台中地方影城] ${page.name}: ${address || '查無地址'} -> ${map ? `${map[2]},${map[1]}` : '查無座標'}`);
+  }
+
+  {
+    const name = '王牌映画影城';
+    const url = 'https://www.acecinema.com.tw/menupage/7/%E5%BD%B1%E5%9F%8E%E8%B3%87%E8%A8%8A';
+    const html = await politeFetch(url);
+    const address = stripHtml(html.match(/地址[：:]<\/strong>\s*(?:<[^>]+>)*\s*([^<]+)/)?.[1]
+      || html.match(/地址[：:]\s*([^<\r\n]+)/)?.[1]);
+    const phone = html.match(/(?:服務專線|電話)[：:]<\/strong>\s*(?:<[^>]+>)*\s*([0-9-]+)/)?.[1]
+      || html.match(/(?:服務專線|電話)[：:]\s*([0-9-]+)/)?.[1]
+      || '04-3707-3999';
+    const geo = address ? await geocode(name, address) : null;
+    addRecord(name, {
+      lat: geo?.lat ?? null,
+      lng: geo?.lng ?? null,
+      address: address || null,
+      phone,
+      transit: null,
+      source: geo ? `acecinema-official-site+nominatim(${geo.method})` : 'acecinema-official-site (查無座標)',
+      url,
+    });
+    console.log(`[台中地方影城] ${name}: ${address || '查無地址'} -> ${geo ? `${geo.lat},${geo.lng} (${geo.method})` : '查無座標'}`);
+  }
+}
+
+// ============================================================
+// 6. 其餘 42 館：改用開眼電影網（atmovies.com.tw）戲院場次頁的「地址:」「電話:」兩行。
 //    代碼→本站官方館名對照表（逐一 curl 核對過地址跟官方資料一致，見各段註解）。
 // ============================================================
 const ATMOVIES_CINEMAS = {
@@ -329,6 +391,7 @@ await fetchShowtimes();
 await fetchAmbassador();
 await fetchMiranew();
 await fetchArthouseOfficial();
+await fetchTaichungLocalOfficial();
 await fetchAtmoviesAddresses();
 
 // 這支是整檔覆寫，查不到座標的會寫成 null。但 fetch/geocode_fill.mjs 之後會把缺的補上，
