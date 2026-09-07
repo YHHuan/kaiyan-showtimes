@@ -27,7 +27,7 @@ const SOURCE_NAMES = {
   miranew: '美麗新',
   miramar: '美麗華大直',
   in89: 'in89',
-  atmovies: '開眼(藝文館)',
+  atmovies: '開眼（藝文／備援）',
   arthouse: '光點華山/府中15',
   arthouse2: '真善美/光點台北/TFAI',
   lux: '樂聲',
@@ -416,7 +416,7 @@ const present = new Set(merged.map((r) => r.source));
 
 // 有些來源抓不到時會由開眼補上（見 fetch/atmovies.mjs）。這種情況要說「改用備援、只有今天」，
 // 不能說「查不到」——新光的場次明明在站上，講成查不到反而是誤導。
-const FALLBACK = { skcinemas: /新光/, miranew: /美麗新/ };
+const FALLBACK = { skcinemas: /新光/, miranew: /美麗新/, acecinema: /王牌映画/ };
 const cinemaNames = new Set(merged.map((r) => r.cinema));
 const coveredByBackup = (src) =>
   FALLBACK[src] && [...cinemaNames].some((n) => FALLBACK[src].test(n));

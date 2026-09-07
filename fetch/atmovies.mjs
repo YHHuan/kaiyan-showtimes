@@ -1,8 +1,9 @@
 // 開眼電影網（atmovies.com.tw）：補洞來源，用來抓「其他來源涵蓋不到」的獨立／藝文／
 // 二輪戲院場次（例如誠品電影院、光點台北：官網不是圖片就是 JS 動態渲染，curl 抓不到），
-// 以及兩個完全沒有官方資料可用的連鎖：威秀／MUVIE（全站 Akamai 擋爬蟲，無頭瀏覽器也 403）、
-// 新光（本機抓得到，但 GitHub Actions 雲端 IP 連 TCP 都被擋，10 次全逾時），以及
-// 美麗新（官方站會拒絕 GitHub Actions 雲端 IP）。
+// 以及官方站無法從 GitHub runner 穩定取得的來源：威秀／MUVIE（全站 Akamai 擋爬蟲，無頭瀏覽器也 403）、
+// 新光（本機抓得到，但 GitHub Actions 雲端 IP 連 TCP 都被擋，10 次全逾時）、
+// 美麗新（官方站會拒絕 GitHub Actions 雲端 IP），以及王牌映画（官網只接受部分
+// 網路區域，GitHub runner 與公開雲端代理皆連線失敗）。
 //
 // 開眼本身是 server-rendered HTML，好抓，但限制是場次頁只顯示「當天」，沒有日期參數可翻頁
 // （實測 /showtime/{code}/a02/ 不吃 date query，也沒找到任何翻頁連結），所以本檔只產出今天一天。
@@ -115,6 +116,12 @@ const MIRANEW_BACKUP = {
   t03301: { name: '桃園台茂美麗新影城', area: '桃園市', region: 'a03', official: 'https://www.miranewcinemas.com/booking/timetable' },
 };
 
+// 王牌官方頁是第一來源；若 GitHub Actions 所在的海外網路連不上，就用開眼的當日場次
+// 補上。t04428 由開眼台中地區清單與官網地址、館名交叉核對。
+const ACECINEMA_BACKUP = {
+  t04428: { name: '王牌映画影城', area: '台中市', region: 'a04', official: 'https://www.acecinema.com.tw/movie/all' },
+};
+
 // 是否啟用開眼備援：讀 data/_status.json；來源缺席、筆數太少，或 fetchedAt 距今超過
 // 26 小時，就視為官方抓取失敗／過期。官方資料還新鮮時略過，避免同一館出現兩份資料。
 async function shouldUseSourceBackup(source, minCount) {
@@ -146,6 +153,12 @@ if (await shouldUseSourceBackup('miranew', 100)) {
   console.log('  [美麗新] 官方來源缺席、過期或抓取失敗，啟用開眼備援');
 } else {
   console.log('  [美麗新] 官方來源新鮮，略過開眼備援，避免重複');
+}
+if (await shouldUseSourceBackup('acecinema', 10)) {
+  Object.assign(CINEMAS, ACECINEMA_BACKUP);
+  console.log('  [王牌映画] 官方來源缺席、過期或抓取失敗，啟用開眼備援');
+} else {
+  console.log('  [王牌映画] 官方來源新鮮，略過開眼備援，避免重複');
 }
 
 // 分級圖示代碼 → 中文級別。開眼用 <img src="/images/cer_X.gif"> 標示分級，沒有 alt 文字，
