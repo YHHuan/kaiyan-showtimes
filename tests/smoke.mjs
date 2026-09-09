@@ -75,6 +75,43 @@ try {
   if (!(await page.content()).includes('美麗華大直影城')) throw new Error('缺少美麗華大直影城');
   await ensureVisibleMovieCards();
   if (await page.locator('.credits').count() < 1) throw new Error('電影卡片沒有導演／演員資料');
+
+  // 同一家戲院可能每部片都有不同活動頁（TFAI／OPENTIX 就是如此），不能把整家戲院
+  // 壓成一個網址。從本輪資料動態找一館兩個不同連結，確認單片頁仍指向該片自己的頁面。
+  const linkCase = await page.evaluate(() => {
+    const byCinema = {};
+    for (const group of DATA.packed.split(';')) {
+      const f = group.split(',');
+      const ci = parseInt(f[0], 36), mi = parseInt(f[1], 36), di = parseInt(f[2], 36);
+      const ui = parseInt(f[5], 36), template = DATA.urls[ui];
+      if (!template) continue;
+      if (!byCinema[ci]) byCinema[ci] = [];
+      if (!byCinema[ci].some((x) => x.template === template)) byCinema[ci].push({ mi, di, template });
+    }
+    for (const [ciText, samples] of Object.entries(byCinema)) {
+      if (samples.length < 2) continue;
+      const ci = Number(ciText), sample = samples[1], date = DATA.dates[sample.di];
+      return {
+        cinema: DATA.cinemas[ci][0],
+        movie: DATA.movies[sample.mi][0],
+        expected: sample.template
+          .replace('{d}', date)
+          .replace('{s}', encodeURIComponent(date.replace(/-/g, '/'))),
+      };
+    }
+    return null;
+  });
+  if (!linkCase) throw new Error('找不到可測試的同館不同活動連結');
+  const movieUrl = new URL(base);
+  movieUrl.searchParams.set('m', linkCase.movie);
+  await page.goto(movieUrl.href, { waitUntil: 'domcontentloaded' });
+  const movieLinks = await page.locator('.vlink').filter({ hasText: linkCase.cinema }).evaluateAll((els) => els.map((el) => el.href));
+  if (!movieLinks.includes(linkCase.expected)) {
+    throw new Error(`單片活動連結配錯：${linkCase.cinema}／${linkCase.movie} → ${movieLinks.join('、')}`);
+  }
+  await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await ensureVisibleMovieCards();
+
   await page.evaluate(() => {
     const option = document.createElement('option');
     option.value = '__測試無場次__';

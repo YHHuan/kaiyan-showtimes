@@ -250,24 +250,16 @@ const mergedTitles = [...variants.values()].filter((v) => v.titles.size > 1).len
 // 改成「同戲院同片同日同廳同標籤」壓成一組，時間存分鐘數、全部用 36 進位字串接起來：
 //   組間 ';'　組內欄位 ','　同組多個時間 '.'
 // 13,767 筆從 458KB 降到約 100KB。
-// 訂票連結改成「每家戲院一個樣板」，不再逐場次存一個索引——這是 packed 裡最貴的欄位之一。
-// 國賓的網址帶查詢日期，換成 {d} 佔位符，前端再把使用者選的日期填回去。
-const urlVotes = new Map();
-for (const r of merged) {
-  const ci = cinemas.id([r.cinema, r.area || '']);
+// 訂票連結用字典索引放在每組場次上；同一活動的多個時間仍只存一次。
+// 不能簡化成「每家戲院一個網址」：TFAI／OPENTIX 是每部片各自一個活動頁，否則同館
+// 所有電影都會被帶到場次最多的那一部。國賓網址裡的日期則換成佔位符，避免每天重複。
+const urlTemplate = (r) => {
   // {d}=2026-08-21 形式、{s}=2026/08/21 形式（各站寫法不同，佔位符自己帶格式）
-  const tpl = safeHttpUrl(r.url)
+  return safeHttpUrl(r.url)
     .replace(r.date, '{d}')
     .replace(r.date.replace(/-/g, '/'), '{s}')
     .replace(encodeURIComponent(r.date.replace(/-/g, '/')), '{s}');
-  if (!urlVotes.has(ci)) urlVotes.set(ci, new Map());
-  const m = urlVotes.get(ci);
-  m.set(tpl, (m.get(tpl) || 0) + 1);
-}
-const cinemaUrl = [];
-for (const [ci, m] of urlVotes) {
-  cinemaUrl[ci] = [...m.entries()].sort((a, b) => b[1] - a[1])[0][0];
-}
+};
 
 const groups = new Map();
 for (const r of merged) {
@@ -278,6 +270,7 @@ for (const r of merged) {
     dates.id(r.date),
     halls.id(r.hall),
     tags.id((r.tags || []).filter(Boolean).join('・') || null),
+    urls.id(urlTemplate(r) || null),
   ];
   const k = key.join(',');
   if (!groups.has(k)) groups.set(k, { key, times: [], seats: [] });
@@ -383,7 +376,7 @@ const payload = {
   movies: movies.list,
   halls: halls.list,
   tags: tags.list,
-  urls: cinemaUrl,
+  urls: urls.list,
   dates: dates.list,
   packed,
   meta: metaByIdx,

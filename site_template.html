@@ -566,7 +566,7 @@
     <p>若您是影城業者，希望調整或移除本站呈現的貴公司場次資料，請至
       <a href="https://github.com/YHHuan/kaiyan-showtimes/issues" target="_blank" rel="noopener">GitHub Issues</a>
       告知，我們會儘速配合處理。</p>
-    <p>場次更新於 <b>__GENERATED__</b>，每日自動重抓。<span id="notice"></span>
+    <p>場次更新於 <b>__GENERATED__</b>，每天約 06:00、18:00（台灣時間）自動重抓。<span id="notice"></span>
       實際場次與票種以各影城官方公告為準；威秀因官方站機器人防護，目前僅有開眼提供的當天場次。</p>
     <p>散場時間為估算（片長＋約 12 分鐘廣告），僅供參考。</p>
     <p>座位色點：<span class="seat s1"></span> 空位多　<span class="seat s2"></span> 剩一些　<span class="seat s3"></span> 快滿了。
@@ -650,7 +650,7 @@ var DATA = __DATA__;
   var ADS = 12;
 
   // 解開 build 端壓好的場次字串：組間 ';'、欄位 ','、同組多個時間 '.'，數字都是 36 進位。
-  // 展開成一維陣列 [戲院, 電影, 日期, 連結, 廳, 標籤, 分鐘數]，後面所有篩選都吃這個。
+  // 展開成一維陣列 [戲院, 電影, 日期, 廳, 標籤, 分鐘數, 座位等級, 連結]，後面所有篩選都吃這個。
   var ROWS = (function () {
     var out = [];
     var packed = DATA.packed;
@@ -659,11 +659,11 @@ var DATA = __DATA__;
     for (var i = 0; i < groups.length; i++) {
       var f = groups[i].split(",");
       var ci = parseInt(f[0], 36), mi = parseInt(f[1], 36), di = parseInt(f[2], 36);
-      var hi = parseInt(f[3], 36), ti = parseInt(f[4], 36);
-      var times = f[5].split(".");
-      var seats = f[6] || "";   // 每個場次一個字元的座位等級，沒有這欄代表該來源沒給
+      var hi = parseInt(f[3], 36), ti = parseInt(f[4], 36), ui = parseInt(f[5], 36);
+      var times = f[6].split(".");
+      var seats = f[7] || "";   // 每個場次一個字元的座位等級，沒有這欄代表該來源沒給
       for (var j = 0; j < times.length; j++) {
-        out.push([ci, mi, di, hi, ti, parseInt(times[j], 36), +(seats.charAt(j) || 0)]);
+        out.push([ci, mi, di, hi, ti, parseInt(times[j], 36), +(seats.charAt(j) || 0), ui]);
       }
     }
     return out;
@@ -671,13 +671,13 @@ var DATA = __DATA__;
 
   var TAG_LANG = T.map(langOf); // 標籤索引 → 語言，先算好避免每次篩選重跑正規表達式
 
-  // 索引：0=戲院 1=電影 2=日期 3=廳 4=標籤 5=分鐘數 6=座位等級(0無資料/1空/2剩一些/3快滿)
+  // 索引：0=戲院 1=電影 2=日期 3=廳 4=標籤 5=分鐘數 6=座位等級(0無資料/1空/2剩一些/3快滿) 7=連結
   function isEvent(r) { var t = T[r[4]]; return !!t && EVENT_RE.test(t); }
   function hhmm(m) { return p2(Math.floor(m / 60)) + ":" + p2(m % 60); }
-  // 訂票連結是每家戲院一個樣板；{d}=2026-08-21、{s}=2026%2F08%2F21（國賓那種帶查詢日期的）
+  // 每組場次保留自己的連結；{d}=2026-08-21、{s}=2026%2F08%2F21（國賓那種帶查詢日期的）
   function bookUrl(r) {
     var d = D[r[2]]; // 用這一筆場次自己的日期，不能用 state.date——單片模式下每筆日期都不同
-    return (U[r[0]] || "")
+    return (U[r[7]] || "")
       .replace("{d}", d)
       .replace("{s}", encodeURIComponent(d.replace(/-/g, "/")));
   }
