@@ -7,6 +7,11 @@ on:
     - cron: '0 22 * * *'
     - cron: '0 10 * * *'
   workflow_dispatch:
+    inputs:
+      rebuild_only:
+        description: '只用快取重建網頁（介面更新用，仍執行資料健康檢查與瀏覽器測試）'
+        type: boolean
+        default: false
 
 # 同時只跑一份，避免兩輪互相蓋掉 data/
 concurrency:
@@ -59,6 +64,7 @@ jobs:
           ffmpeg -version | head -1
 
       - name: 抓取所有來源
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.rebuild_only }}
         run: bash run-all.sh
         continue-on-error: true   # 個別來源失敗不該中止整條流程，交給健康檢查裁決
 

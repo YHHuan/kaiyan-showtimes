@@ -59,6 +59,9 @@
 GitHub Actions **每天台北時間 06:00 與 18:00** 各重抓一次（各影城多半在前一天 20:00 前
 公布隔日場次，早上抓到完整的今天，傍晚補當天異動與新開放的預售）。
 
+介面更新可手動勾選 workflow 的 `rebuild_only`，使用快取重建與發佈，仍須通過資料健康檢查與
+瀏覽器測試。預設不勾選；每日兩次排程仍會照常抓取所有來源。
+
 部署、網域成本、自動更新、安全模型與事故處理詳見
 [`docs/deployment-and-security.md`](docs/deployment-and-security.md)。目前是公開 repository + GitHub Pages，
 使用標準 runner 的主機與排程成本可維持 NT$0；自訂網域是日後的品牌選項，不是上線必要條件。

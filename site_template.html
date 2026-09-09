@@ -729,15 +729,21 @@ var DATA = __DATA__;
 
   function readFavorites() {
     try {
-      var v = JSON.parse(store.get("favorites", "{}")) || {};
+      var v;
+      try { v = JSON.parse(store.get("favorites", "{}")) || {}; } catch (e) { v = {}; }
       function names(a) { return Array.from(new Set(Array.isArray(a) ? a.filter(function (x) { return typeof x === "string" && x.length > 0 && x.length <= 500; }) : [])); }
       var sessions = new Map();
-      (Array.isArray(v.sessions) ? v.sessions : []).forEach(function (s) {
+      // 舊版分頁只認 movies/cinemas，仍可能整包覆寫 favorites；場次必須獨立保存。
+      var separateSessions = store.get("sessions", null);
+      var sessionList;
+      try { sessionList = separateSessions === null ? v.sessions : JSON.parse(separateSessions); } catch (e) { sessionList = []; }
+      (Array.isArray(sessionList) ? sessionList : []).forEach(function (s) {
         if (!s || ![s.movie, s.cinema, s.date, s.hall, s.tag].every(function (x) { return typeof x === "string" && x.length <= 1000; })) return;
         if (!s.movie || !s.cinema || !/^\d{4}-\d{2}-\d{2}$/.test(s.date) || !Number.isFinite(sessionStart(s))) return;
         if (!Number.isInteger(s.mins) || s.mins < 0 || s.mins >= 2880) return;
         sessions.set(sessionKey(s), { movie: s.movie, cinema: s.cinema, date: s.date, mins: s.mins, hall: s.hall, tag: s.tag });
       });
+      if (separateSessions === null && sessions.size) store.set("sessions", JSON.stringify(Array.from(sessions.values())));
       return { movies: names(v.movies), cinemas: names(v.cinemas), sessions: Array.from(sessions.values()) };
     } catch (e) { return { movies: [], cinemas: [], sessions: [] }; }
   }
@@ -776,7 +782,10 @@ var DATA = __DATA__;
     var next = readFavorites();
     var at = kind === "sessions" ? next.sessions.findIndex(function (s) { return sessionKey(s) === key; }) : next[kind].indexOf(key);
     if (at >= 0) next[kind].splice(at, 1); else next[kind].push(value);
-    if (!store.set("favorites", JSON.stringify(next))) {
+    var saved = kind === "sessions"
+      ? store.set("sessions", JSON.stringify(next.sessions))
+      : store.set("favorites", JSON.stringify({ movies: next.movies, cinemas: next.cinemas }));
+    if (!saved) {
       saveMessage("無法儲存收藏；請允許瀏覽器儲存網站資料後再試。");
       return;
     }
@@ -2111,7 +2120,7 @@ var DATA = __DATA__;
   }
 
   window.addEventListener("storage", function (e) {
-    if (e.key !== "kaiyan.favorites" && e.key !== null) return;
+    if (e.key !== "kaiyan.favorites" && e.key !== "kaiyan.sessions" && e.key !== null) return;
     favorites = readFavorites();
     if (state.saved || state.onlyFav) render(); else updateFavoriteControls();
   });

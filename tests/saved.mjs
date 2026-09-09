@@ -50,7 +50,9 @@ async function newPage(context) {
   await page.clock.setFixedTime(new Date('2030-01-01T12:00:00+08:00'));
   return page;
 }
-async function stored(page) { return page.evaluate(() => JSON.parse(localStorage.getItem('kaiyan.favorites'))); }
+async function stored(page) {
+  return page.evaluate(() => ({ ...JSON.parse(localStorage.getItem('kaiyan.favorites') || '{}'), sessions: JSON.parse(localStorage.getItem('kaiyan.sessions') || '[]') }));
+}
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/Los_Angeles' });
   let page = await newPage(context);
@@ -102,6 +104,13 @@ try {
   await otherTab.locator('.saved-session').waitFor({ state: 'detached' });
   await page.locator('.t').filter({ hasText: '20:00' }).first().click();
   await otherTab.locator('.saved-session').waitFor();
+  // 模擬尚未重新整理的舊版分頁：它只會寫 movies/cinemas，不能覆蓋單場收藏。
+  await otherTab.evaluate(() => {
+    const old = JSON.parse(localStorage.getItem('kaiyan.favorites'));
+    localStorage.setItem('kaiyan.favorites', JSON.stringify({ movies: old.movies, cinemas: old.cinemas }));
+  });
+  await page.reload();
+  assert.equal(await page.locator('.t[aria-pressed="true"]').count(), 1, '舊版分頁寫入不能刪掉場次收藏');
   const separate = await browser.newContext();
   const separatePage = await newPage(separate);
   await separatePage.goto(base + '?saved=1');
@@ -132,6 +141,12 @@ try {
   assert.match(await page.locator('#save-status').innerText(), /無法儲存收藏/);
   await page.reload();
   await page.evaluate(() => localStorage.setItem('kaiyan.favorites', '{broken'));
+  await page.goto(base + '?saved=1');
+  assert.equal(await page.locator('.saved-session').count(), 1, '電影收藏資料毀損時仍應保留獨立的場次收藏');
+  await page.evaluate(() => {
+    localStorage.setItem('kaiyan.favorites', '{broken');
+    localStorage.setItem('kaiyan.sessions', '{broken');
+  });
   await page.goto(base + '?saved=1');
   assert.match(await page.locator('#list').innerText(), /先留下一部想看的電影吧/);
   for (const width of [320, 390, 1280]) {
