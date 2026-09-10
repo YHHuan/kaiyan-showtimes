@@ -16,15 +16,15 @@
 //      （必須帶 Referer，否則永遠 "No Result"）拿到片碼，再抓 /movie/<code>/ detail 頁面。
 //      逐一片名查、無法批次，且沒有台灣分級文字，分級改用 data/*.json 本身既有的 rating 欄位補。
 //
-// 跨來源同片名常有裝飾性差異（版本前綴、特映場標籤、全形/半形標點等），故另建一個「寬鬆比對鍵」
-// （looseKey）只用於「這是不是同一部片」的判斷；查無精確比對鍵時，再退一步用「互相包含」比對。
+// 跨來源沿用建站的片名比對鍵；只剝除可辨識且本片確實存在的場次裝飾。
+// 保留剪輯、語言與年份，不再以任意子字串猜測電影身分。
 // 輸出的 JSON 鍵仍是 data/*.json 原始的片名字串（未再次正規化）。
 
 import { readFile, writeFile, mkdir, rm, unlink, readdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { politeFetch, normTitle, todayISO } from '../lib/common.mjs';
+import { politeFetch, normTitle, todayISO, matchKey, resolveMovieKey, trustedMovieMeta } from '../lib/common.mjs';
 
 import { tmpdir } from 'node:os';
 
@@ -57,27 +57,8 @@ function parseRuntimeHM(s) {
   return h * 60 + parseInt(m[2], 10);
 }
 
-// 去掉開頭/結尾的裝飾性括號註記（版本、特映場、重映標示等）跟英文廳別標籤前綴，
-// 只用於「這是不是同一部片」的寬鬆比對，不影響輸出的片名鍵。
-function stripAnnotations(t) {
-  let s = (t || '').trim();
-  for (let i = 0; i < 4; i++) {
-    const s2 = s
-      .replace(/^[（(【\[「『《〈][^（）()【】[\]「」『』《》〈〉]{1,12}[）)】\]」』》〉]\s*/, '')
-      .replace(/\s*[（(【\[「『《〈][^（）()【】[\]「」『』《》〈〉]{1,16}[）)】\]」』》〉]$/, '');
-    if (s2 === s) break;
-    s = s2.trim();
-  }
-  // "DolbyCinema 藍色監獄" / "DolbyVisionAtmos 藍色監獄" 這種英文服務標籤 + 空白 + 中文片名
-  s = s.replace(/^[A-Za-z][A-Za-z0-9]{2,}\s+(?=[一-鿿])/, '');
-  return s.trim();
-}
-
 function looseKey(t) {
-  return stripAnnotations(t)
-    .normalize('NFKC')
-    .replace(/[·．‧・,，、。.！!？?'’"“”\s:：\-—]/g, '')
-    .toLowerCase();
+  return matchKey(normTitle(t));
 }
 
 function cleanEn(s) {
@@ -451,8 +432,8 @@ async function atmoviesSearch(query) {
     return null;
   }
   if (/No Result/i.test(html)) return null;
-  const m = html.match(/href="\/F\/([a-z0-9]+)\/?"[^>]*class="title big">\s*([^<]*)/i);
-  return m ? { code: m[1], title: m[2].trim() } : null;
+  return [...html.matchAll(/href="\/F\/([a-z0-9]+)\/?"[^>]*class="title big">\s*([^<]*)/gi)]
+    .map((m) => ({ code: m[1], title: m[2].trim() }));
 }
 
 function extractAtmoviesSynopsis(html) {
@@ -489,13 +470,16 @@ async function atmoviesDetail(code) {
 }
 
 async function atmoviesLookup(rawTitle) {
-  const query = stripAnnotations(rawTitle);
+  const query = normTitle(rawTitle);
   if (!query) return null;
-  const found = await atmoviesSearch(query);
-  if (!found) return null;
-  const wantedKey = looseKey(query);
-  const foundKey = looseKey(found.title);
-  if (!wantedKey || !foundKey || (!wantedKey.includes(foundKey) && !foundKey.includes(wantedKey))) return null;
+  const results = await atmoviesSearch(query);
+  if (!results?.length) return null;
+  const key = resolveMovieKey(query, new Map(results.map((r) => [looseKey(r.title), r])));
+  const matches = results.filter((r) => looseKey(r.title) === key);
+  // 同名多個來源電影 ID，缺年份無法消歧時留白，不取第一筆。
+  const unique = [...new Map(matches.map((r) => [r.code, r])).values()];
+  if (unique.length !== 1) return null;
+  const found = unique[0];
   let detail;
   try {
     detail = await atmoviesDetail(found.code);
@@ -505,6 +489,7 @@ async function atmoviesLookup(rawTitle) {
   }
   if (!detail.posterUrl && !detail.synopsis && !detail.directors.length && !detail.cast.length) return null;
   return {
+    matchedTitle: found.title,
     en: null,
     posterUrl: detail.posterUrl,
     synopsis: detail.synopsis,
@@ -536,7 +521,7 @@ function mergeGroup(candidates) {
     return p !== 0 ? p : completeness(b) - completeness(a);
   });
   const base = sorted[0];
-  const merged = { en: base.en, posterUrl: base.posterUrl, synopsis: base.synopsis, rating: base.rating, runtimeMin: base.runtimeMin, directors: base.directors || [], cast: base.cast || [] };
+  const merged = { matchedTitle: base.sourceTitle, en: base.en, posterUrl: base.posterUrl, synopsis: base.synopsis, rating: base.rating, runtimeMin: base.runtimeMin, directors: base.directors || [], cast: base.cast || [] };
   const sources = new Set([base.source]);
   for (const c of sorted.slice(1)) {
     let contributed = false;
@@ -550,21 +535,6 @@ function mergeGroup(candidates) {
   }
   merged.metaSource = [...sources].join('+');
   return merged;
-}
-
-// looseKey 精確比對查無時的最後一步：找一個「互相包含」且夠長的既有群組鍵
-// （處理像「航海王映畫祭 航海王劇場版：機關城的鋼鐵巨兵」包住了乾淨片名的情況）
-function resolveKey(lk, mergedByKey) {
-  if (!lk) return null;
-  if (mergedByKey.has(lk)) return lk;
-  let best = null;
-  for (const k of mergedByKey.keys()) {
-    if (k.length < 4 || lk.length < 4) continue;
-    if (lk.includes(k) || k.includes(lk)) {
-      if (!best || k.length > best.length) best = k;
-    }
-  }
-  return best;
 }
 
 // ---------- 海報縮圖 ----------
@@ -641,6 +611,7 @@ async function loadWantedTitles() {
   for (const f of files) {
     try {
       const rows = JSON.parse(await readFile(new URL(f, dataDirUrl), 'utf8'));
+      if (!Array.isArray(rows)) continue;
       for (const r of rows) {
         if (!r || !r.movie) continue;
         titles.add(r.movie);
@@ -683,14 +654,14 @@ async function main() {
   for (const [lk, list] of groups) mergedByKey.set(lk, mergeGroup(list));
   console.log(`官方批次來源合併後：${mergedByKey.size} 個不重複片名群組`);
 
-  // 找出官方批次來源（含互相包含的寬鬆比對）仍查無的片名，逐一查開眼補
+  // 官方批次來源仍查無的片名，逐一查開眼補。
   const missingLks = new Set();
   const repTitleOf = new Map(); // lk -> 一個代表性原始片名，當開眼搜尋關鍵字
   for (const title of wantedTitles) {
     const lk = looseKey(title);
     if (!lk) continue;
     if (!repTitleOf.has(lk)) repTitleOf.set(lk, title);
-    if (!resolveKey(lk, mergedByKey)) missingLks.add(lk);
+    if (!resolveMovieKey(title, mergedByKey)) missingLks.add(lk);
   }
   console.log(`官方批次來源查無、需查開眼補的片名群組：${missingLks.size} 個`);
 
@@ -698,10 +669,9 @@ async function main() {
   let atmoviesHit = 0;
   let atmoviesTried = 0;
   for (const lk of missingLks) {
-    // 這個 lk 可能已經被前面某次 atmovies 命中、且跟它互相包含而間接補到了，先確認還缺不缺
-    if (resolveKey(lk, mergedByKey)) continue;
-    atmoviesTried++;
     const rep = repTitleOf.get(lk) || lk;
+    if (resolveMovieKey(rep, mergedByKey)) continue;
+    atmoviesTried++;
     let rec = null;
     try {
       rec = await atmoviesLookup(rep);
@@ -724,7 +694,7 @@ async function main() {
   for (const title of wantedTitles) {
     const lk = looseKey(title);
     if (!lk) continue;
-    const key = resolveKey(lk, mergedByKey);
+    const key = resolveMovieKey(title, mergedByKey);
     const rec = key ? mergedByKey.get(key) : null;
     if (!rec) continue;
     matched++;
@@ -733,6 +703,8 @@ async function main() {
     const rating = rec.rating || ratingFallback.get(title) || null;
     const entry = {
       title,
+      matchVersion: 2,
+      matchedTitle: rec.matchedTitle,
       en: rec.en || null,
       posterUrl: rec.posterUrl || null,
       synopsis,
@@ -760,4 +732,15 @@ async function main() {
   console.log(`已寫入 ${outPath.pathname}`);
 }
 
-await main();
+async function needsMetadataUpgrade() {
+  try {
+    const entries = Object.entries(JSON.parse(await readFile(new URL('../data/movie_meta.json', import.meta.url), 'utf8')));
+    return !entries.length || entries.some(([title, rec]) => !trustedMovieMeta(title, rec));
+  } catch { return true; }
+}
+
+if (process.argv.includes('--if-needed') && !await needsMetadataUpgrade()) {
+  console.log('電影資料比對版本已更新，沿用本輪快取。');
+} else {
+  await main();
+}

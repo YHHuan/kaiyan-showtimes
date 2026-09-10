@@ -5,7 +5,7 @@
 import { readFile, writeFile, readdir, mkdir, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { matchKey, foldTitle } from './lib/common.mjs';
+import { matchKey, foldTitle, truncatedTitleKey, trustedMovieMeta } from './lib/common.mjs';
 
 const root = new URL('.', import.meta.url).pathname;
 const SITE_URL = (process.env.SITE_URL || 'https://yhhuan.github.io/kaiyan-showtimes').replace(/\/$/, '');
@@ -217,9 +217,7 @@ const keysByLen = [...variants.keys()].sort((a, b) => a.length - b.length);
 let truncFolded = 0;
 for (const short of keysByLen) {
   if (!variants.has(short) || short.length < 8) continue;
-  const full = keysByLen.find(
-    (k) => k !== short && k.length > short.length && k.length - short.length <= 3 && k.startsWith(short) && variants.has(k),
-  );
+  const full = truncatedTitleKey(short, variants.keys());
   if (!full) continue;
   const from = variants.get(short);
   const to = variants.get(full);
@@ -326,10 +324,13 @@ try {
 
 // 電影 metadata 對齊 movies 索引（meta 的鍵是各來源原始片名，一樣用 matchKey 對上）
 const metaByKey = new Map();
+let untrustedMeta = 0;
 for (const [k, v] of Object.entries(meta)) {
+  if (!trustedMovieMeta(k, v)) { untrustedMeta++; continue; }
   const mk = matchKey(k);
   if (!metaByKey.has(mk) || (v.synopsis && !metaByKey.get(mk).synopsis)) metaByKey.set(mk, v);
 }
+if (untrustedMeta) console.log(`  略過 ${untrustedMeta} 筆未核對電影版本的基本資料，請更新 movie_meta`);
 
 // 先決定哪些片有海報（決定 sprite 的排列順序），再拼 sprite
 const posterPaths = [];
@@ -346,7 +347,7 @@ for (let i = 0; i < movies.list.length; i++) {
   const entry = {};
   // 卡片上只顯示兩行，截短可觀地縮小內嵌體積
   if (m.synopsis) entry.s = m.synopsis.length > 88 ? m.synopsis.slice(0, 88) + '…' : m.synopsis;
-  if (m.runtimeMin) entry.d = m.runtimeMin;
+  if (Number.isFinite(m.runtimeMin) && m.runtimeMin > 0) entry.d = m.runtimeMin;
   if (m.directors?.length) entry.r = m.directors.slice(0, 3).join('、');
   if (m.cast?.length) entry.c = m.cast.slice(0, 6).join('、');
   const pi = sprite?.index.get(m.thumb);

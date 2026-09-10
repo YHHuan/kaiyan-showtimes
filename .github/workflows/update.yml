@@ -68,6 +68,11 @@ jobs:
         run: bash run-all.sh
         continue-on-error: true   # 個別來源失敗不該中止整條流程，交給健康檢查裁決
 
+      # 即使是介面快取重建，也不能沿用尚未核對電影版本的舊 metadata。
+      # 快取已升級時不打網路；每日完整抓取完成後也會直接略過。
+      - name: 升級舊版電影資料比對
+        run: node fetch/movie_meta.mjs --if-needed
+
       - name: 健康檢查
         run: node check_health.mjs
 

@@ -581,7 +581,7 @@
       <label>距離上限
         <select id="maxDist"><option value="all">不限</option><option value="3">3 公里</option><option value="5">5 公里</option><option value="10">10 公里</option><option value="20">20 公里</option></select>
       </label>
-      <div class="planhint">依開演時間排列；有片長時會排除超過最晚散場的場次。距離只在你的瀏覽器計算。</div>
+      <div class="planhint">最晚時間早於最早時間時，會找至隔日凌晨。有片長才可估算散場；片長未知的場次另作提示。距離只在你的瀏覽器計算。</div>
     </div>
   </div>
 
@@ -1104,7 +1104,7 @@ var DATA = __DATA__;
   }
 
   // 搜尋不是資料庫欄位的逐字比對。使用者常會一次輸入「蜘蛛人 4D 台中」，
-  // 因此先抽出地區與影廳格式，再讓剩下的字詞比對片名、影城、廳名與原始標籤。
+  // 先保護完整片名（例如「台北物語」），再從剩餘文字抽出地區與影廳格式。
   // 特別注意：泛稱 4D 只包含會動的 4DX／MX4D，不能把 ULTRA 3D 誤報成 4D。
   function searchNorm(v) {
     return String(v || "").normalize("NFKC").toLowerCase().replace(/臺/g, "台");
@@ -1113,8 +1113,16 @@ var DATA = __DATA__;
     return searchNorm(v).replace(/[^\p{Letter}\p{Number}]+/gu, "");
   }
 
+  var searchTitles = Array.from(new Set(M.flatMap(function (m) {
+    return [searchCompact(m[0]), searchCompact(m[1])];
+  }).filter(Boolean))).sort(function (a, b) { return b.length - a.length; });
+
   function parseSearchQuery(q) {
     var work = searchCompact(q);
+    var title = searchTitles.find(function (t) {
+      return work === t || ((/[\u3400-\u9fff]/.test(t) ? t.length >= 2 : t.length >= 4) && work.indexOf(t) >= 0);
+    }) || null;
+    if (title) work = work.replace(title, " ");
     var format = null;
     var formatAliases = [
       ["dolbycinema", "Dolby Cinema", ["Dolby Cinema"]],
@@ -1154,10 +1162,13 @@ var DATA = __DATA__;
       return true;
     });
 
-    return { raw: q, text: work, areas: areaIntent, format: format };
+    return { raw: q, title: title, text: searchCompact(work), areas: areaIntent, format: format };
   }
 
   function searchMatches(r, intent) {
+    if (intent.title && ![M[r[1]][0], M[r[1]][1]].some(function (t) {
+      return searchCompact(t).indexOf(intent.title) >= 0;
+    })) return false;
     if (intent.areas && intent.areas.indexOf(C[r[0]][1]) < 0) return false;
     var tag = T[r[4]] || "", hall = H[r[3]] || "";
     var formats = formatOf(tag, hall);
@@ -1177,12 +1188,16 @@ var DATA = __DATA__;
 
   function filtered() {
     var di = D.indexOf(state.date);
+    var window = state.view === "plan" ? planWindow() : null;
     var q = state.q;
     var searchIntent = q ? parseSearchQuery(q) : null;
     var out = [];
     for (var i = 0; i < ROWS.length; i++) {
       var r = ROWS[i];
-      if (state.movie != null) {
+      if (window) {
+        var start = rowStart(r);
+        if (start < window.start || start > window.end) continue;
+      } else if (state.movie != null) {
         if (r[1] !== state.movie) continue;
         if (state.dates.length && state.dates.indexOf(D[r[2]]) < 0) continue;
       } else if (r[2] !== di) continue;
@@ -1199,7 +1214,7 @@ var DATA = __DATA__;
             : isFavorite("movies", r[1]);
         if (!favMatch && !savedContains("sessions", sessionKey(sessionSnapshot(r)))) continue;
       }
-      if (!state.showPast && (D[r[2]] < NOW.date || (D[r[2]] === NOW.date && r[5] < NOW.mins))) continue;
+      if (!state.showPast && rowStart(r) < Date.parse(NOW.date + "T00:00:00+08:00") + NOW.mins * 60000) continue;
       if (searchIntent && !searchMatches(r, searchIntent)) continue;
       out.push(r);
     }
@@ -1268,14 +1283,14 @@ var DATA = __DATA__;
   }
 
   function icsStamp(date, mins) {
-    var d = new Date(date + "T00:00:00");
-    d.setMinutes(mins);
-    return d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + "T" + p2(d.getHours()) + p2(d.getMinutes()) + "00";
+    // 日期與時分是台北牆上時間；以 UTC 做純日曆運算，避免海外裝置的夏令時間介入。
+    return new Date(Date.parse(date + "T00:00:00Z") + mins * 60000).toISOString()
+      .slice(0, 19).replace(/[-:]/g, "");
   }
 
   function downloadIcs(r) {
     var meta = META[r[1]] || {};
-    var duration = meta.d || 120;
+    var duration = meta.d || null;
     var venue = C[r[0]][0];
     var url = bookUrl(r);
     var lines = [
@@ -1284,11 +1299,13 @@ var DATA = __DATA__;
       "UID:" + [D[r[2]], r[5], r[0], r[1]].join("-") + "@kaiyan-showtimes",
       "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, ""),
       "DTSTART;TZID=Asia/Taipei:" + icsStamp(D[r[2]], r[5]),
-      "DTEND;TZID=Asia/Taipei:" + icsStamp(D[r[2]], r[5] + duration + ADS),
       "SUMMARY:" + icsText(M[r[1]][0]),
       "LOCATION:" + icsText(venue),
-      "DESCRIPTION:" + icsText("開演時間 " + hhmm(r[5]) + "；散場時間為片長加 12 分鐘廣告的估算。")
+      "DESCRIPTION:" + icsText("開演時間 " + hhmm(r[5]) + (duration
+        ? "；散場時間為片長加 12 分鐘廣告的估算。"
+        : "；片長未提供，無法確認散場時間；行事曆未設定結束時間。"))
     ];
+    if (duration) lines.push("DTEND;TZID=Asia/Taipei:" + icsStamp(D[r[2]], r[5] + duration + ADS));
     if (url) lines.push("URL:" + url);
     lines.push("END:VEVENT", "END:VCALENDAR", "");
     var blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
@@ -1663,14 +1680,28 @@ var DATA = __DATA__;
     return card;
   }
 
-  function planFits(r) {
+  function rowStart(r) {
+    return Date.parse(D[r[2]] + "T00:00:00+08:00") + r[5] * 60000;
+  }
+
+  function planWindow() {
+    var midnight = Date.parse(state.date + "T00:00:00+08:00");
     var start = toMins(state.planStart || "00:00");
     var deadline = toMins(state.planEnd || "23:59");
     if (deadline < start) deadline += 1440;
-    var show = r[5] < start && r[5] + 1440 >= start ? r[5] + 1440 : r[5];
-    if (show < start) return false;
+    return { start: midnight + start * 60000, end: midnight + deadline * 60000 };
+  }
+
+  function taipeiStamp(time) {
+    return new Date(time + 8 * 3600000).toISOString();
+  }
+
+  function planFits(r) {
+    var window = planWindow();
+    var show = rowStart(r);
+    if (show < window.start || show > window.end) return false;
     var duration = (META[r[1]] && META[r[1]].d) || null;
-    if (duration != null && show + duration + ADS > deadline) return false;
+    if (duration != null && show + (duration + ADS) * 60000 > window.end) return false;
     if (state.maxPrice !== "all") {
       var pr = PRICE[r[0]];
       if (!pr || pr[0] > Number(state.maxPrice)) return false;
@@ -1683,8 +1714,8 @@ var DATA = __DATA__;
   }
 
   function renderPlanner(rows, list) {
-    var planned = rows.filter(planFits).sort(function (a, b) {
-      if (a[5] !== b[5]) return a[5] - b[5];
+    var planned = rows.slice().sort(function (a, b) {
+      if (rowStart(a) !== rowStart(b)) return rowStart(a) - rowStart(b);
       var da = distKm(a[0]), db = distKm(b[0]);
       if (da != null && db != null && da !== db) return da - db;
       var pa = PRICE[a[0]] && PRICE[a[0]][0], pb = PRICE[b[0]] && PRICE[b[0]][0];
@@ -1707,8 +1738,13 @@ var DATA = __DATA__;
     planned.slice(0, cap).forEach(function (r) {
       var row = el("div", "planrow");
       var meta = META[r[1]] || {};
-      var time = el("div", "plantime", hhmm(r[5]));
-      if (meta.d) time.appendChild(el("small", null, "約 " + hhmm((r[5] + meta.d + ADS) % 1440) + " 散場"));
+      var start = taipeiStamp(rowStart(r));
+      var time = el("div", "plantime", start.slice(11, 16));
+      time.appendChild(el("small", null, (start.slice(0, 10) !== state.date ? "翌日 " : "") + start.slice(5, 10).replace("-", "/")));
+      if (meta.d) {
+        var end = taipeiStamp(rowStart(r) + (meta.d + ADS) * 60000);
+        time.appendChild(el("small", null, "約 " + (end.slice(0, 10) !== start.slice(0, 10) ? "翌日 " : "") + end.slice(11, 16) + " 散場"));
+      }
       row.appendChild(time);
 
       var main = el("div", "planmain");
@@ -1718,6 +1754,7 @@ var DATA = __DATA__;
       main.appendChild(el("div", "planvenue", C[r[0]][0] + "・" + (C[r[0]][1] || "")));
       var bits = [];
       if (T[r[4]] || H[r[3]]) bits.push(T[r[4]] || H[r[3]]);
+      if (!meta.d) bits.push("片長未提供，無法確認散場時間");
       if (PRICE[r[0]]) bits.push("全票 $" + PRICE[r[0]][0] + " 起");
       var km = distKm(r[0]);
       if (km != null) bits.push(km < 1 ? Math.round(km * 1000) + " 公尺" : km.toFixed(1) + " 公里");
@@ -1789,6 +1826,8 @@ var DATA = __DATA__;
     var d = p.get("d");
     if (d && d >= NOW.date && D.indexOf(d) >= 0) state.date = d;
     if (["movie", "cinema", "plan"].indexOf(p.get("v")) >= 0) state.view = p.get("v");
+    // 單片連結應優先開啟單片頁；不能一邊鎖電影、一邊顯示另一種檢視的控制列。
+    if (state.movie != null) state.view = "movie";
     var a = p.get("a");
     if (a && (a === "全部" || areas.indexOf(a) >= 0)) state.area = a;
     var s = p.get("s");
@@ -1857,7 +1896,7 @@ var DATA = __DATA__;
     sum.appendChild(el("span", null,
       state.movie != null
         ? (state.dates.length ? state.dates.length + " 個指定日期" : nDates + " 天全部場次")
-        : state.date));
+        : state.view === "plan" ? state.date + " " + state.planStart + "–" + (toMins(state.planEnd) < toMins(state.planStart) ? "翌日 " : "") + state.planEnd : state.date));
     sum.appendChild(el("span", null, "·"));
     var b = el("span", null, "");
     b.appendChild(el("b", null, String(nMovies)));
