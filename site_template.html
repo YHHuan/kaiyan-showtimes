@@ -265,7 +265,7 @@
     overflow: hidden;
     position: relative;
   }
-  .poster img { position: absolute; max-width: none; }
+  .poster img { position: absolute; display: block; max-width: none; max-height: none; }
   .headtext { flex: 1; min-width: 0; }
   h2 {
     font-family: "Noto Serif TC", serif;
@@ -437,7 +437,6 @@
   .back { border: 0; background: none; color: var(--ink2); font-family: inherit; font-size: 13px; padding: 0 0 12px; cursor: pointer; }
   .back:hover { color: var(--red); }
   .poster.big { flex-basis: 88px; width: 88px; height: 132px; }
-  .poster.big img { transform: scale(1.42); transform-origin: top left; }
   .hint { color: var(--ink3); font-size: 12px; margin-top: 10px; }
   .daycard { border-top: 1px solid var(--line); padding-top: 12px; margin-bottom: 20px; }
   .dayhead { display: flex; align-items: baseline; gap: 10px; padding-bottom: 4px; }
@@ -675,7 +674,6 @@ var DATA = __DATA__;
     if (nEl) { nEl.textContent = NOTICE + " "; nEl.style.color = "var(--accent)"; }
   }
 
-  var CELL_W = 62, CELL_H = 93;
   // 正片前的廣告與預告，各家約 10-15 分鐘；散場時間是估算，不是官方數字
   var ADS = 12;
 
@@ -1530,6 +1528,26 @@ var DATA = __DATA__;
     return v;
   }
 
+  // 首頁與內頁共用圖集裁切：圖片大小與位移都以海報容器為基準。
+  // 不能只放大 img 卻保留原本的 px 位移，否則會裁到相鄰電影；百分比也會隨手機尺寸縮放。
+  function moviePoster(mi, large) {
+    var meta = META[mi];
+    if (!SPRITE || !SPRITE.uri || !meta || !Number.isInteger(meta.i)
+        || !Number.isInteger(SPRITE.cols) || SPRITE.cols < 1
+        || !Number.isInteger(SPRITE.rows) || SPRITE.rows < 1
+        || meta.i < 0 || meta.i >= SPRITE.cols * SPRITE.rows) return null;
+    var box = el("div", "poster" + (large ? " big" : ""));
+    var im = document.createElement("img");
+    im.src = SPRITE.uri;
+    im.alt = "";
+    im.style.width = SPRITE.cols * 100 + "%";
+    im.style.height = SPRITE.rows * 100 + "%";
+    im.style.left = -(meta.i % SPRITE.cols) * 100 + "%";
+    im.style.top = -Math.floor(meta.i / SPRITE.cols) * 100 + "%";
+    box.appendChild(im);
+    return box;
+  }
+
   // 單片模式最上面的那張卡：返回、海報、完整簡介、跨日期的統計
   function movieHeader(mi, rows) {
     var info = M[mi], meta = META[mi] || {};
@@ -1540,18 +1558,8 @@ var DATA = __DATA__;
     card.appendChild(back);
 
     var head = el("div", "head");
-    if (meta.i != null && SPRITE) {
-      var box = el("div", "poster big");
-      var im = document.createElement("img");
-      im.src = SPRITE.uri;
-      im.alt = "";
-      im.width = SPRITE.cols * CELL_W;
-      im.height = SPRITE.rows * CELL_H;
-      im.style.left = -(meta.i % SPRITE.cols) * CELL_W + "px";
-      im.style.top = -Math.floor(meta.i / SPRITE.cols) * CELL_H + "px";
-      box.appendChild(im);
-      head.appendChild(box);
-    }
+    var poster = moviePoster(mi, true);
+    if (poster) head.appendChild(poster);
     var ht = el("div", "headtext");
     ht.appendChild(el("h2", null, info[0]));
     if (info[1]) ht.appendChild(el("div", "en", info[1]));
@@ -1581,18 +1589,8 @@ var DATA = __DATA__;
     var card = el("div", "card");
     var head = el("div", "head");
 
-    if (meta.i != null && SPRITE) {
-      var box = el("div", "poster");
-      var im = document.createElement("img");
-      im.src = SPRITE.uri;
-      im.alt = "";
-      im.width = SPRITE.cols * CELL_W;
-      im.height = SPRITE.rows * CELL_H;
-      im.style.left = -(meta.i % SPRITE.cols) * CELL_W + "px";
-      im.style.top = -Math.floor(meta.i / SPRITE.cols) * CELL_H + "px";
-      box.appendChild(im);
-      head.appendChild(box);
-    }
+    var poster = moviePoster(mi, false);
+    if (poster) head.appendChild(poster);
 
     var ht = el("div", "headtext");
     var h2 = el("h2");

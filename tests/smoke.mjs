@@ -51,6 +51,22 @@ async function ensureVisibleMovieCards() {
   await page.locator('.favbtn').first().waitFor({ state: 'visible' });
 }
 
+async function checkPosterCrops() {
+  await page.locator('.poster img').evaluateAll(ims => Promise.all(ims.map(im => im.decode())));
+  const failures = await page.locator('.poster').evaluateAll(boxes => boxes.flatMap(box => {
+    const title = box.closest('.head').querySelector('h2').textContent;
+    const mi = DATA.movies.findIndex(m => m[0] === title), index = DATA.meta[mi]?.i;
+    if (!Number.isInteger(index)) return [title + ': missing poster index'];
+    const im = box.querySelector('img'), b = box.getBoundingClientRect(), r = im.getBoundingClientRect();
+    const cw = im.naturalWidth / DATA.sprite.cols, ch = im.naturalHeight / DATA.sprite.rows;
+    const actual = [(b.left - r.left) * im.naturalWidth / r.width, (b.top - r.top) * im.naturalHeight / r.height,
+      b.width * im.naturalWidth / r.width, b.height * im.naturalHeight / r.height];
+    const expected = [index % DATA.sprite.cols * cw, Math.floor(index / DATA.sprite.cols) * ch, cw, ch];
+    return actual.some((v, i) => !Number.isFinite(v) || Math.abs(v - expected[i]) > 0.1) ? [title + ': poster crop mismatch'] : [];
+  }));
+  if (failures.length) throw new Error(failures.join(' | '));
+}
+
 try {
   const response = await page.goto(base, { waitUntil: 'domcontentloaded' });
   if (!response?.ok()) throw new Error(`首頁 HTTP ${response?.status()}`);
@@ -75,6 +91,14 @@ try {
   if (!(await page.content()).includes('美麗華大直影城')) throw new Error('缺少美麗華大直影城');
   await ensureVisibleMovieCards();
   if (await page.locator('.credits').count() < 1) throw new Error('電影卡片沒有導演／演員資料');
+  await checkPosterCrops();
+  const posterTitle = await page.evaluate(() => DATA.movies.find((m, mi) => DATA.meta[mi]?.i > 0)?.[0]);
+  if (!posterTitle) throw new Error('缺少可測試的非首格海報');
+  await page.goto(base + '?n=1&m=' + encodeURIComponent(posterTitle), { waitUntil: 'domcontentloaded' });
+  if (await page.locator('.poster.big').count() !== 1) throw new Error('單片頁缺少海報');
+  await checkPosterCrops();
+  await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await ensureVisibleMovieCards();
 
   // 同一家戲院可能每部片都有不同活動頁（TFAI／OPENTIX 就是如此），不能把整家戲院
   // 壓成一個網址。從本輪資料動態找一館兩個不同連結，確認單片頁仍指向該片自己的頁面。
