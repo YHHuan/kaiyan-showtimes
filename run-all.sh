@@ -16,6 +16,7 @@ run() {
   printf '\n=== %s ===\n' "$name"
   if ! node "fetch/$name.mjs"; then
     echo "!! $name 失敗（沿用上一輪資料）"
+    node --input-type=module -e 'import { markSourceFailed } from "./lib/common.mjs"; await markSourceFailed("data/" + process.argv[1] + ".json");' "$name" || echo "!! $name 失敗狀態未能寫入"
     failed+=("$name")
   fi
 }

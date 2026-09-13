@@ -97,6 +97,7 @@ for (const [source, floor] of Object.entries(FLOOR)) {
   if (ageH > 26) {
     warnings.push(`${source}: 沿用 ${ageH.toFixed(0)} 小時前的資料（本輪抓取失敗）`);
   }
+  if (s.lastAttemptState === 'failed') warnings.push(`${source}: 本輪抓取失敗，逐館逐日改用備援或標示快取`);
   // 讀實際資料檢查形狀，光看 _status.json 的筆數會漏掉「解析壞掉但筆數正常」
   const shape = SHAPE[source];
   if (shape) {
@@ -136,6 +137,7 @@ const missingCinemas = coverage.filter(c => c.state === 'missing');
 for (const c of coverage) {
   if (c.state === 'missing') warnings.push(`${c.name}: 未取得有效場次（不是確認無放映）`);
   else if (c.state === 'partial') warnings.push(`${c.name}: ${c.failedDates.join('、')} 抓取失敗`);
+  else if (c.state === 'no-today') warnings.push(`${c.name}: 有未來檔期，但未取得今天資料，請核對休館或公布範圍`);
   else if (c.state === 'today-only') warnings.push(`${c.name}: 只有今天資料，跨日後需更新；請確認來源是否已公布未來日期`);
   const previous = history._cinemas?.[c.name];
   if (previous?.count && c.count < previous.count * DROP_RATIO) warnings.push(`${c.name}: 有效場次 ${previous.count} → ${c.count}，請核對該館日期範圍`);

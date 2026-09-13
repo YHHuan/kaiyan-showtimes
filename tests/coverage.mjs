@@ -4,7 +4,7 @@ import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { cinemaCoverage, selectScheduleRows, freshCinema } from '../lib/cinema-coverage.mjs';
-import { saveRecords } from '../lib/common.mjs';
+import { saveRecords, markSourceFailed } from '../lib/common.mjs';
 
 const now = Date.parse('2026-09-13T08:00:00+08:00'), stamp = new Date(now).toISOString();
 const day = '2026-09-13';
@@ -71,5 +71,25 @@ test('寫入來源狀態時保留掉館紀錄與各館日期，零筆不算成�
     assert.equal(s.cinemas.另一館.count, 0);
     assert.deepEqual(s.cinemas.天母.dates, [day]);
     assert.ok(s.cinemas.另一館.lastSuccessAt);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('整支抓取器失敗會撤銷上一輪成功狀態，保留時間戳並讓新備援接手', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'kaiyan-source-failure-'));
+  try {
+    const path = join(dir, 'miranew.json');
+    const oldStamp = new Date(Date.now() - 12 * 3600000).toISOString();
+    const official = row('miranew', '台北天母新光影城', day, oldStamp);
+    await saveRecords(path, [official]);
+    const before = JSON.parse(await readFile(join(dir, '_status.json'), 'utf8'));
+    const backup = row('atmovies', official.cinema, day, new Date().toISOString());
+    assert.deepEqual(selectScheduleRows([official, backup], before).map(r => r.source), ['miranew']);
+    await markSourceFailed(path);
+    const after = JSON.parse(await readFile(join(dir, '_status.json'), 'utf8'));
+    assert.equal(after.miranew.fetchedAt, before.miranew.fetchedAt);
+    assert.equal(after.miranew.cinemas[official.cinema].state, 'failed');
+    assert.equal(after.miranew.lastAttemptState, 'failed');
+    assert.equal(JSON.parse(await readFile(path, 'utf8'))[0].fetchedAt, oldStamp);
+    assert.deepEqual(selectScheduleRows([official, backup], after).map(r => r.source), ['atmovies']);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
