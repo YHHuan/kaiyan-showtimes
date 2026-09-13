@@ -95,6 +95,8 @@ test('實際建站以來源 ID 拆開驀然回首，天母真人場不能共用�
       { ...baseRow, cinema: '台北天母新光影城', movie: '驀然回首', sourceMovieId: 'fljp39094466', sourceRuntimeMin: 100 },
       { ...baseRow, cinema: '王牌映画影城', movie: '驀然回首(2024)', sourceMovieId: 'fljp31711040', sourceRuntimeMin: 57 },
       { ...baseRow, cinema: '來源缺識別資訊的影城', movie: '驀然回首' },
+      { ...baseRow, source: 'arthouse2', cinema: '真善美戲院', movie: '驀然回首', url: 'https://wonderful.movie.com.tw/movie/inner?id=2406' },
+      { ...baseRow, source: 'arthouse2', cinema: '真善美戲院', movie: '驀然回首', time: '16:25', url: 'https://wonderful.movie.com.tw/movie/inner?id=2396' },
       { ...baseRow, cinema: '已核實來源甲', movie: '超異能快感2', sourceMovieId: 'fpen32588798', sourceRuntimeMin: 129 },
       { ...baseRow, source: 'ambassador', cinema: '已核實來源乙', movie: '超異能快感：魔法之書', sourceRuntimeMin: 110 },
       { ...baseRow, cinema: '未核實來源甲', movie: '同名未知作品', sourceRuntimeMin: 90 },
@@ -126,6 +128,8 @@ test('實際建站以來源 ID 拆開驀然回首，天母真人場不能共用�
     const tianmu = data.cinemas.findIndex(c => c[0] === '台北天母新光影城');
     const groups = data.packed.split(';').map(g => g.split(',').map(v => parseInt(v, 36)));
     assert.deepEqual(groups.filter(g => g[0] === tianmu).map(g => g[1]), [live]);
+    const wonderful = data.cinemas.findIndex(c => c[0] === '真善美戲院');
+    assert.deepEqual(groups.filter(g => g[0] === wonderful).map(g => g[1]).sort(), [live, animation].sort(), '同館兩個同名作品也不得合併');
     assert.equal(data.aliases['驀然回首'], undefined, '舊收藏的歧義裸名不可自動選版本');
   } finally {
     await rm(scratch, { recursive: true, force: true });
