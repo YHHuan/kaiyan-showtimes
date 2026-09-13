@@ -5,8 +5,11 @@
   "scripts": {
     "build": "node build_site.mjs",
     "health": "node check_health.mjs",
-    "check": "node --check build_site.mjs && node --check lib/common.mjs && node --check lib/movie-identity.mjs && node --check lib/schedule-parsers.mjs && node --check lib/cinema-coverage.mjs && node --check fetch/atmovies.mjs && node --check fetch/skcinemas.mjs && node --check fetch/acecinema.mjs && node --check fetch/miranew.mjs && node --check fetch/centuryasia.mjs && node --check fetch/movie_meta.mjs && node --check check_health.mjs && node --check sw.js && node --check tests/smoke.mjs && node --check tests/saved.mjs && node --check tests/query.mjs && node --check tests/identity.mjs && node --check tests/posters.mjs && node --check tests/sources.mjs && node --check tests/coverage.mjs && node --check tests/coverage-ui.mjs && bash -n run-all.sh",
-    "smoke": "node --test tests/identity.mjs tests/sources.mjs tests/coverage.mjs && node tests/query.mjs && node tests/coverage-ui.mjs && node tests/posters.mjs && node tests/smoke.mjs && node tests/saved.mjs"
+    "check": "node --check build_site.mjs && node --check lib/common.mjs && node --check lib/movie-identity.mjs && node --check lib/schedule-parsers.mjs && node --check lib/cinema-coverage.mjs && node --check lib/local-skcinemas.mjs && node --check fetch/atmovies.mjs && node --check fetch/skcinemas.mjs && node --check fetch/local_skcinemas.mjs && node --check scripts/publish-local-skcinemas.mjs && node --check fetch/acecinema.mjs && node --check fetch/miranew.mjs && node --check fetch/centuryasia.mjs && node --check fetch/movie_meta.mjs && node --check check_health.mjs && node --check sw.js && node --check tests/smoke.mjs && node --check tests/saved.mjs && node --check tests/query.mjs && node --check tests/identity.mjs && node --check tests/posters.mjs && node --check tests/sources.mjs && node --check tests/coverage.mjs && node --check tests/coverage-ui.mjs && node --check tests/local-skcinemas.mjs && bash -n run-all.sh && bash -n scripts/local-skcinemas.sh",
+    "smoke": "node --test tests/identity.mjs tests/sources.mjs tests/coverage.mjs tests/local-skcinemas.mjs && node tests/query.mjs && node tests/coverage-ui.mjs && node tests/posters.mjs && node tests/smoke.mjs && node tests/saved.mjs",
+    "local:preview": "node scripts/publish-local-skcinemas.mjs",
+    "local:publish": "node scripts/publish-local-skcinemas.mjs --publish",
+    "local:install": "node scripts/install-local-skcinemas-task.mjs"
   },
   "devDependencies": {
     "playwright": "^1.60.0"

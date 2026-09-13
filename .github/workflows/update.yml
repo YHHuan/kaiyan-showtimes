@@ -68,6 +68,10 @@ jobs:
         run: bash run-all.sh
         continue-on-error: true   # 個別來源失敗不該中止整條流程，交給健康檢查裁決
 
+      - name: 快取重建也納入本機新光補充
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_only }}
+        run: node fetch/local_skcinemas.mjs
+
       # 即使是介面快取重建，也不能沿用尚未核對電影版本的舊 metadata。
       # 快取已升級時不打網路；每日完整抓取完成後也會直接略過。
       - name: 升級舊版電影資料比對

@@ -503,6 +503,7 @@ const siteStatus = {
     id: source,
     name: SOURCE_NAMES[source] || source,
     ageHours: freshness[source] == null ? null : Number(freshness[source].toFixed(1)),
+    ...(status[source]?.localSnapshotAt ? { localSnapshotAt: status[source].localSnapshotAt } : {}),
   })),
   warnings: { absent, viaBackup, lagging, staleSources,
     cinemas: coverage.filter(c => c.state !== 'ok').map(c => ({ name: c.name, state: c.state, failedDates: c.failedDates })),

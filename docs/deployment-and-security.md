@@ -7,6 +7,7 @@
 - 公開的 GitHub repository 保存程式碼。
 - GitHub Actions 每天台北時間 05:17、17:17 排程抓場次、健康檢查、建站；可能排隊延遲。
 - GitHub Pages 只發布產出的靜態檔案。
+- 新光可由本機 Windows＋WSL 提前補抓五館，只上傳白名單 JSON；雲端驗證後納入，不使用個人電腦當 runner。
 - 不設會員、資料庫、付款或後台 API；收藏與定位只留在訪客自己的瀏覽器。
 
 在 repository 維持公開、使用標準 GitHub-hosted runner，而且流量與檔案量未超過 GitHub Pages
@@ -42,6 +43,7 @@ GitHub 的[自訂網域設定文件](https://docs.github.com/en/pages/configurin
 
 1. 取回上一輪資料快取。
 2. 從各影城公開場次頁或 API 唯讀抓取。
+   新光本機 JSON 也是可選來源；不存在或不合格就繼續使用官方／開眼，不阻斷更新。
 3. 健康檢查資料筆數、來源與分館跌幅、新鮮度、各館日期缺口及電影版本不明。
 4. 建立互動首頁、電影／戲院／日期索引頁、sitemap 與 `site-status.json`。
 5. 只有健康檢查通過才部署；失敗時線上保留上一個成功版本。
@@ -56,6 +58,9 @@ GitHub 的[自訂網域設定文件](https://docs.github.com/en/pages/configurin
 - 有設定 `TELEGRAM_TOKEN`、`TELEGRAM_CHAT_ID` secrets 時，來源異常會傳 Telegram；沒有設定也不影響網站。
 
 公開狀態可直接看 [`site-status.json`](https://yhhuan.github.io/kaiyan-showtimes/site-status.json)，不用再手動把 README 或使用說明的影城數字改來改去。
+
+本機補充的 05:05／17:05 排程、登入補跑、憑證權限與停止方式，見
+[新光本機 JSON 補充](local-skcinemas.md)。本機未開機或未登入時不執行；雲端並不依賴它才能建站。
 
 排程維持每天兩次、全程不呼叫 LLM。錯開整點並提前準備早晚資料，但跨日可用性不能依賴準點排程，
 因此會預先取得來源已公布的多日場次。GitHub 官方也說明，排程可能因高負載延後：

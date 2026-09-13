@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 # 官方與開眼均抓取已公布日期，建站再逐館逐日選用；共用狀態檔維持序列寫入。
 HTTP_FETCHERS=(showtimes ambassador centuryasia miranew miramar lux arthouse arthouse2 acecinema srm ccmovie prices cinemas geocode_fill skcinemas)
 BROWSER_FETCHERS=(in89)   # 新光已改為公開 HTML，只有 in89 仍需瀏覽器
-LAST_FETCHERS=(atmovies)
+LAST_FETCHERS=(atmovies local_skcinemas) # 本機 JSON 補充在 metadata 前納入，官方較新時不倒退。
 
 failed=()
 
