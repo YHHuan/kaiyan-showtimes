@@ -18,8 +18,10 @@ const distribution = process.env.WSL_DISTRO_NAME;
 if (!distribution) throw new Error('請在目標 Windows 的 WSL 內執行安裝器');
 const linuxUser = (await exec('id', ['-un'], options)).stdout.trim();
 for (const value of [repo, distribution, linuxUser]) {
-  if (!value || /["\r\n]/.test(value)) throw new Error('WSL 參數含有不合法字元');
+  if (!value || /["%!\r\n]/.test(value)) throw new Error('WSL 參數含有不合法字元');
 }
+if (![distribution, linuxUser].every(v => /^[a-zA-Z0-9_.-]+$/.test(v))) throw new Error('WSL 發行版／使用者名稱須為英數、底線、句點或連字號');
+const windowsRepo = (await exec('wslpath', ['-w', repo], options)).stdout.trim();
 try {
   await exec('schtasks.exe', ['/Query', '/TN', taskName], options);
   console.log('同名任務已存在，不覆蓋；請先核對其動作與觸發時間');
@@ -29,7 +31,8 @@ try {
   // 查詢不存在回 1；若其實是權限問題，後面的原生建立指令仍須通過 Windows 權限檢查。
 }
 const xml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
-const args = `--distribution "${distribution}" --user "${linuxUser}" --cd "${repo}" --exec /usr/bin/bash scripts/local-skcinemas.sh`;
+// 由 cmd 提供明確的 stdin/stdout，並記錄 WSL 啟動失敗；名稱經白名單檢查再交给 launcher。
+const args = `/d /s /c ""${windowsRepo}\\scripts\\local-skcinemas.cmd" "${distribution}" "${linuxUser}" "${repo}""`;
 const day = taipeiDay(Date.now());
 const definition = `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -48,7 +51,7 @@ const definition = `<?xml version="1.0" encoding="UTF-16"?>
     <WakeToRun>false</WakeToRun><ExecutionTimeLimit>PT10M</ExecutionTimeLimit><Priority>7</Priority>
     <RestartOnFailure><Interval>PT10M</Interval><Count>1</Count></RestartOnFailure>
   </Settings>
-  <Actions Context="Collector"><Exec><Command>${xml(host.windows)}\\System32\\wsl.exe</Command><Arguments>${xml(args)}</Arguments></Exec></Actions>
+  <Actions Context="Collector"><Exec><Command>${xml(host.windows)}\\System32\\cmd.exe</Command><Arguments>${xml(args)}</Arguments></Exec></Actions>
 </Task>`;
 const cache = new URL('../.cache/local-skcinemas/', import.meta.url);
 await mkdir(cache, { recursive: true });

@@ -11,7 +11,7 @@ fi
 exec >>"$task_cache/task.log" 2>&1
 printf '\n[%s] 本機新光補抓開始\n' "$(date --iso-8601=seconds)"
 cd -- "$task_repo"
-if [[ $(git branch --show-current) != main ]] || ! git diff --quiet HEAD -- lib scripts; then
+if [[ $(git branch --show-current) != main ]] || [[ -n $(git status --porcelain --untracked-files=all -- lib scripts) ]]; then
   echo '安全停止：本機不在 main，或補抓程式尚有未提交變更；不自動 pull 或執行其他分支'
   exit 1
 fi

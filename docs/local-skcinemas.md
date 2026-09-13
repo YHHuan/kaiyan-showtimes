@@ -66,6 +66,8 @@ node scripts/install-local-skcinemas-task.mjs
 
 安裝器不覆蓋同名既有任務；目前 Windows 必須是台北時區，它不會自行更改系統時區。
 發行版、Linux 使用者與專案位置取自目前 WSL。產生的任務 XML 只留在 gitignored cache，不上傳帳號或電腦名稱。
+Windows launcher 另記錄 WSL 啟動錯誤；XML 使用 UTF-16LE，發行版／Linux 使用者名稱經白名單檢查，
+避免這台 WSL 對排程命令中的引號名稱誤判為找不到發行版。
 若 Windows 權限禁止建立任務，安裝器停止，不提升權限或停用安全控制。
 
 ## 檢查、暫停與移除
@@ -79,6 +81,7 @@ Disable-ScheduledTask -TaskName 'Kaiyan-Local-ShinKong'
 ```
 
 - 本機紀錄：`.cache/local-skcinemas/task.log`（約 256 KB 後輪替，保留上一份）。
+- Windows／WSL 啟動紀錄：`.cache/local-skcinemas/windows-task.log`（同樣限制大小並輪替）。
 - 本機預覽：`.cache/local-skcinemas/preview.json`。
 - 最近成功上傳：`.cache/local-skcinemas/published.json`（時間、提交、場次數，不含憑證）。
 - 雲端 log 搜尋「本機新光補充」；`site-status.json` 的新光來源會附 `localSnapshotAt`。
