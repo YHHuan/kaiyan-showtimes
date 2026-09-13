@@ -31,7 +31,7 @@ try {
 const xml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 const args = `--distribution "${distribution}" --user "${linuxUser}" --cd "${repo}" --exec /usr/bin/bash scripts/local-skcinemas.sh`;
 const day = taipeiDay(Date.now());
-const definition = `<?xml version="1.0" encoding="UTF-8"?>
+const definition = `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>Kaiyan: fetch five public Shin Kong schedules and upload JSON only. No LLM, no remote runner, no auto-pull.</Description></RegistrationInfo>
   <Triggers>
@@ -53,12 +53,16 @@ const definition = `<?xml version="1.0" encoding="UTF-8"?>
 const cache = new URL('../.cache/local-skcinemas/', import.meta.url);
 await mkdir(cache, { recursive: true });
 const configPath = fileURLToPath(new URL('windows-task.xml', cache));
-await writeFile(configPath, definition); // 任務設定是產物，留在 gitignored cache，不上傳電腦／帳號名稱。
+// schtasks 以 Unicode 讀取 XML；UTF-16LE + BOM 避免「無法切換編碼」。
+await writeFile(configPath, '\uFEFF' + definition, 'utf16le'); // 設定產物留在 gitignored cache，不上傳電腦／帳號名稱。
 const windowsPath = (await exec('wslpath', ['-w', configPath], options)).stdout.trim();
 // 刻意不使用 /F；若建立時另一個同名任務出現，不可無聲覆蓋。
 try {
-  await exec('schtasks.exe', ['/Create', '/TN', taskName, '/XML', windowsPath], options);
-} catch {
-  throw new Error('Windows 拒絕建立任務；未提升權限、未變更安全政策。請查看工作排程器權限');
+  await exec('schtasks.exe', ['/Create', '/TN', taskName, '/XML', windowsPath, '/HRESULT'], { ...options, encoding: 'buffer' });
+} catch (error) {
+  const raw = error.stderr || error.stdout || Buffer.alloc(0);
+  const utf8 = raw.toString('utf8');
+  const detail = (utf8.includes('\uFFFD') ? new TextDecoder('big5').decode(raw) : utf8).trim().slice(0, 700);
+  throw new Error(`Windows 未建立任務（${error.code}）：${detail}；未提升權限、未變更安全政策`);
 }
 console.log(`已建立 ${taskName}：台北 05:05／17:05、登入補跑、一般權限；未修改 execution policy`);
