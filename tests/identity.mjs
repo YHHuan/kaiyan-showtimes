@@ -95,10 +95,16 @@ test('實際建站以來源 ID 拆開驀然回首，天母真人場不能共用�
       { ...baseRow, cinema: '台北天母新光影城', movie: '驀然回首', sourceMovieId: 'fljp39094466', sourceRuntimeMin: 100 },
       { ...baseRow, cinema: '王牌映画影城', movie: '驀然回首(2024)', sourceMovieId: 'fljp31711040', sourceRuntimeMin: 57 },
       { ...baseRow, cinema: '來源缺識別資訊的影城', movie: '驀然回首' },
+      { ...baseRow, cinema: '已核實來源甲', movie: '超異能快感2', sourceMovieId: 'fpen32588798', sourceRuntimeMin: 129 },
+      { ...baseRow, source: 'ambassador', cinema: '已核實來源乙', movie: '超異能快感：魔法之書', sourceRuntimeMin: 110 },
+      { ...baseRow, cinema: '未核實來源甲', movie: '同名未知作品', sourceRuntimeMin: 90 },
+      { ...baseRow, cinema: '未核實來源乙', movie: '同名未知作品', sourceRuntimeMin: 150 },
     ];
     await writeFile(join(scratch, 'data', 'atmovies.json'), JSON.stringify(records));
     await writeFile(join(scratch, 'data', 'movie_meta.json'), JSON.stringify({
       '驀然回首': { matchVersion: 2, matchedTitle: '驀然回首', runtimeMin: 58, synopsis: '僅屬於動畫的介紹', directors: ['押山清高'] },
+      '超異能快感：魔法之書': { matchVersion: 3, matchedTitle: '超異能快感：魔法之書', runtimeMin: 130, synopsis: '已核實作品的介紹' },
+      '同名未知作品': { matchVersion: 3, matchedTitle: '同名未知作品', runtimeMin: 150, synopsis: '不能信任的同名作品介紹' },
     }));
     execFileSync(process.execPath, [join(scratch, 'build_site.mjs')], { cwd: scratch, stdio: 'pipe' });
     const html = await readFile(join(scratch, 'out', 'index.html'), 'utf8');
@@ -106,13 +112,17 @@ test('實際建站以來源 ID 拆開驀然回首，天母真人場不能共用�
     const live = data.movies.findIndex(m => m[0] === '驀然回首(真人版)');
     const animation = data.movies.findIndex(m => m[0] === '驀然回首(動畫)');
     const uncertain = data.movies.findIndex(m => m[0] === '驀然回首(版本待確認)');
-    assert.equal(data.movies.length, 3);
+    assert.equal(data.movies.length, 5);
     assert.ok(live >= 0 && animation >= 0 && uncertain >= 0);
     assert.equal(data.meta[live].d, 100);
     assert.equal(data.meta[animation].d, 58);
     assert.doesNotMatch(JSON.stringify(data.meta[live]), /僅屬於動畫|押山清高/);
     assert.match(JSON.stringify(data.meta[animation]), /僅屬於動畫/);
     assert.equal(data.meta[uncertain], undefined);
+    const knownConflict = data.movies.findIndex(m => m[0] === '超異能快感：魔法之書');
+    assert.equal(data.meta[knownConflict].d, undefined, '片長來源矛盾時不能估算散場');
+    assert.match(data.meta[knownConflict].s, /已核實作品的介紹/, '不能因片長錯誤誤刪已核實的作品介紹');
+    assert.equal(data.meta[data.movies.findIndex(m => m[0] === '同名未知作品')], undefined);
     const tianmu = data.cinemas.findIndex(c => c[0] === '台北天母新光影城');
     const groups = data.packed.split(';').map(g => g.split(',').map(v => parseInt(v, 36)));
     assert.deepEqual(groups.filter(g => g[0] === tianmu).map(g => g[1]), [live]);

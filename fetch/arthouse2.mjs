@@ -123,6 +123,7 @@ async function fetchWonderful() {
           cinema: '真善美戲院',
           area: '台北市',
           movie: title,
+          sourceMovieId: `wonderful:${id}`,
           date,
           time: t[1].padStart(5, '0'),
           hall: null, // 官網場次表不分廳（片場實際有 A/B 兩廳，但未標示在場次上）

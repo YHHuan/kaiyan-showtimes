@@ -359,8 +359,11 @@ for (const r of merged) {
 for (const [key, values] of runtimeEvidence) {
   const durations = [...values, metaByKey.get(key)?.runtimeMin].filter(Number.isFinite);
   if (Math.max(...durations) - Math.min(...durations) > 5) {
-    metaByKey.delete(key);
-    identityIssues.push(`${key}（片長來源不一致，暫不套用基本資料）`);
+    const verified = metaByKey.get(key);
+    // 已透過來源 ID 核實的作品，片長衝突不表示海報或導演也錯；只停用片長與散場估算。
+    if (verified?.movieIdentity) metaByKey.set(key, { ...verified, runtimeMin: null });
+    else metaByKey.delete(key);
+    identityIssues.push(`${key}（片長來源不一致，${verified?.movieIdentity ? '保留已核實介紹，暫不估算散場' : '暫不套用基本資料'}）`);
   } else if (!metaByKey.has(key)) {
     metaByKey.set(key, { runtimeMin: [...values][0] });
   }

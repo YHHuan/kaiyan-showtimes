@@ -21,6 +21,8 @@
 - 王牌同時排映 100 分鐘真人版及 57 分鐘動畫版，改保留電影 ID 與片長。
 - 美麗新的真人版標為 101 分鐘，納入經官方頁核實的來源差異。
 - 喜樂時代永和／今日店的裸名，從該館該 ProgramID 的介紹頁核對 57 分鐘；舊售票 ID 加上分館範圍。
+- 真善美的裸名以已查證的電影介紹網址辨識為動畫版；該頁明載押山清高與配音演員，不靠片名猜測。
+- 已核實作品但來源片長矛盾時，保留正確介紹與海報、停止估算散場；作品身分尚未核實則不套用基本資料。
 - 歷史狀態與新資料共用縣市正規化，避免花蓮市／花蓮縣、台東市／台東縣重複影城。
 - 整支抓取器拋錯也更新「本輪失敗」狀態，保留原始資料時間，避免前一輪成功狀態壓過新的備援。
 - 舊收藏與連結保留：確定的別名可找回；裸名《驀然回首》提醒重新選版本，不清除使用者收藏。
@@ -32,6 +34,7 @@
 - [開眼真人版 ID fljp39094466](https://www.atmovies.com.tw/movie/fljp39094466/)、[動畫版 ID fljp31711040](https://www.atmovies.com.tw/movie/fljp31711040/)
 - [王牌官方全部場次](https://www.acecinema.com.tw/movie/all)、[美麗新官方時刻表](https://www.miranewcinemas.com/booking/timetable)
 - [喜樂時代永和動畫版介紹](https://ticket.centuryasia.com.tw/beyond/movie_timetable.aspx?ProgramID=0000244&TimeDetail=True)、[今日店動畫版介紹](https://ticket.centuryasia.com.tw/ximen/movie_timetable.aspx?ProgramID=0000296&TimeDetail=True)
+- [真善美《驀然回首》動畫版介紹](https://wonderful.movie.com.tw/movie/inner?id=2396)
 - [GitHub 排程延遲說明](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
 
 ## 驗證

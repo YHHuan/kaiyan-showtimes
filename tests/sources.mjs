@@ -49,6 +49,8 @@ test('同一來源 ID 的異名歸戶，未知同名版本不猜，版本矛盾�
   assert.equal(identifyMovie({ movie: '驀然回首', runtimeMin: 101 }).movie, '驀然回首(真人版)');
   assert.equal(identifyMovie({ movie: '驀然回首', runtimeMin: 58 }).movie, '驀然回首(動畫)');
   assert.equal(identifyMovie({ movie: '驀然回首' }).uncertain, true);
+  assert.equal(identifyMovie({ source: 'arthouse2', movie: '驀然回首', url: 'https://wonderful.movie.com.tw/movie/inner?id=2396' }).movie, '驀然回首(動畫)');
+  assert.equal(identifyMovie({ source: 'arthouse2', movie: '驀然回首', url: 'https://wonderful.movie.com.tw/movie/inner?id=9999' }).uncertain, true);
   assert.equal(identifyMovie({ source: 'atmovies', sourceMovieId: 'fljp39094466', movie: '驀然回首(2024)', runtimeMin: 57 }).uncertain, true);
   assert.equal(identifyMovie({ movie: '驀然回首2' }).movie, '驀然回首2');
   assert.equal(identifyMovie({ movie: '超異能快感2', source: 'atmovies', sourceMovieId: 'fpen32588798' }).movie, '超異能快感：魔法之書');
