@@ -5,7 +5,7 @@
 目前最適合的正式架構就是現有的組合：
 
 - 公開的 GitHub repository 保存程式碼。
-- GitHub Actions 每天台北時間 06:00、18:00 抓場次、健康檢查、建站。
+- GitHub Actions 每天台北時間 05:17、17:17 排程抓場次、健康檢查、建站；可能排隊延遲。
 - GitHub Pages 只發布產出的靜態檔案。
 - 不設會員、資料庫、付款或後台 API；收藏與定位只留在訪客自己的瀏覽器。
 
@@ -42,18 +42,25 @@ GitHub 的[自訂網域設定文件](https://docs.github.com/en/pages/configurin
 
 1. 取回上一輪資料快取。
 2. 從各影城公開場次頁或 API 唯讀抓取。
-3. 健康檢查資料筆數、來源跌幅與新鮮度。
+3. 健康檢查資料筆數、來源與分館跌幅、新鮮度、各館日期缺口及電影版本不明。
 4. 建立互動首頁、電影／戲院／日期索引頁、sitemap 與 `site-status.json`。
 5. 只有健康檢查通過才部署；失敗時線上保留上一個成功版本。
 
 維護者可在 GitHub 的 **Actions → 更新場次 → Run workflow** 隨時手動更新。若某來源改版：
 
 - 單一來源短暫失敗：沿用上一輪資料，頁尾明示資料較舊。
-- 超過 72 小時：整個來源剔除，不顯示過期場次。
+- 某館／某日缺資料：逐館逐日使用開眼備援；兩個來源都不足時，頁面明示範圍與官方查詢入口。
+- 超過 72 小時：排除過期来源與場次快取；保留失敗資料的原始抓取時間，不視作本輪更新。
 - 全站總量過低或過半來源異常：中止部署，保留上一版。
+- 大比例分館無有效場次：即使總量足夠也中止部署。
 - 有設定 `TELEGRAM_TOKEN`、`TELEGRAM_CHAT_ID` secrets 時，來源異常會傳 Telegram；沒有設定也不影響網站。
 
 公開狀態可直接看 [`site-status.json`](https://yhhuan.github.io/kaiyan-showtimes/site-status.json)，不用再手動把 README 或使用說明的影城數字改來改去。
+
+排程維持每天兩次、全程不呼叫 LLM。錯開整點並提前準備早晚資料，但跨日可用性不能依賴準點排程，
+因此會預先取得來源已公布的多日場次。GitHub 官方也說明，排程可能因高負載延後：
+[schedule 事件](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)。
+介面功能測試固定測試時鐘，資料健康檢查仍使用真實台北日期；不再因晚上所有測試候選場次已開演而擋住正常更新。
 
 ## 安全模型
 

@@ -8,6 +8,9 @@
 //   3. 新鮮度：超過 FRESH_HOURS 沒更新的來源，資料不再採用
 //   4. 全站門檻：總量低於 MIN_TOTAL 就不要發佈，寧可停留在舊版
 import { readFile, writeFile } from 'node:fs/promises';
+import { cinemaCoverage, selectScheduleRows } from './lib/cinema-coverage.mjs';
+import { normalizeMovieRecords } from './lib/movie-identity.mjs';
+import { todayISO } from './lib/common.mjs';
 
 const root = new URL('.', import.meta.url).pathname;
 
@@ -18,7 +21,7 @@ const root = new URL('.', import.meta.url).pathname;
 const SHAPE = {
   ambassador:  { hallPct: [80, 100], movies: [15, 80] },
   centuryasia: { hallPct: [80, 100], movies: [20, 80] },
-  skcinemas:   { hallPct: [80, 100], movies: [8, 60] },
+  skcinemas:   { hallPct: [0, 100], movies: [8, 60] }, // 新 HTML 有格式但未標廳名，不杜撰
   miranew:     { hallPct: [80, 100], movies: [5, 50] },
   miramar:     { hallPct: [80, 100], movies: [5, 50] },
   lux:         { hallPct: [80, 100], movies: [4, 40] },
@@ -42,7 +45,7 @@ const FLOOR = {
   miranew: 60,       // 兩館單日約 125，六天約 720
   miramar: 30,       // 美麗華大直一館，官方多日端點實測約 180
   in89: 100,         // in89 2 館，實測約 520
-  atmovies: 40,      // 開眼補的藝文館，只有當天，實測約 240
+  atmovies: 40,      // 來源整體硬底線；多日、缺館與跌幅另由逐館覆蓋檢查處理
   arthouse: 20,      // 光點華山＋府中15，實測約 180
   arthouse2: 25,     // 真善美＋光點台北＋TFAI（TFAI 走 OPENTIX），實測約 128
   lux: 15,           // 樂聲，官方只公布今明兩天，實測 80~190
@@ -121,6 +124,31 @@ for (const [source, floor] of Object.entries(FLOOR)) {
   total += s.count;
 }
 
+const allRows = [];
+for (const source of Object.keys(FLOOR)) {
+  try {
+    const rows = JSON.parse(await readFile(`${root}data/${source}.json`, 'utf8'));
+    if (Array.isArray(rows)) allRows.push(...rows);
+  } catch {}
+}
+const coverage = cinemaCoverage(allRows, status, todayISO(), now);
+const missingCinemas = coverage.filter(c => c.state === 'missing');
+for (const c of coverage) {
+  if (c.state === 'missing') warnings.push(`${c.name}: 未取得有效場次（不是確認無放映）`);
+  else if (c.state === 'partial') warnings.push(`${c.name}: ${c.failedDates.join('、')} 抓取失敗`);
+  else if (c.state === 'today-only') warnings.push(`${c.name}: 只有今天資料，跨日後需更新；請確認來源是否已公布未來日期`);
+  const previous = history._cinemas?.[c.name];
+  if (previous?.count && c.count < previous.count * DROP_RATIO) warnings.push(`${c.name}: 有效場次 ${previous.count} → ${c.count}，請核對該館日期範圍`);
+}
+let sourceMetadata = {};
+try { sourceMetadata = JSON.parse(await readFile(`${root}data/movie_meta.json`, 'utf8')); } catch {}
+const uncertain = [...new Set(normalizeMovieRecords(selectScheduleRows(allRows, status, now).filter(r => r.date >= todayISO()), sourceMetadata).filter(r => r.identityUncertain).map(r => r.movie))];
+for (const movie of uncertain) warnings.push(`${movie}: 作品版本尚待確認，禁止共用其他版本基本資料`);
+// 來源總量很大也不能掩蓋數十間影城消失；小量休館／未公布仍只警告。
+const coverageBlocked = coverage.length >= 10 && missingCinemas.length > Math.max(3, coverage.length * 0.2);
+if (coverageBlocked) problems.push(`${missingCinemas.length}/${coverage.length} 家影城沒有有效資料，停止發佈`);
+await writeFile(`${root}data/_health.json`, JSON.stringify({ checkedAt: new Date(now).toISOString(), problems, warnings, coverage }, null, 2));
+
 console.log('來源健康度：');
 for (const [k, v] of Object.entries(healthy)) console.log(`  ✓ ${k.padEnd(13)} ${v}`);
 for (const w of warnings) console.log(`  ! ${w}`);
@@ -128,7 +156,13 @@ for (const p of problems) console.log(`  ✗ ${p}`);
 console.log(`\n可用來源 ${Object.keys(healthy).length}/${Object.keys(FLOOR).length}，總場次 ${total}`);
 
 // 更新歷史（只記健康的，免得把壞掉的低數字當成新基準）
-await writeFile(`${root}data/_history.json`, JSON.stringify({ ...history, ...healthy }, null, 1));
+if (!coverageBlocked && total >= MIN_TOTAL && problems.length <= Object.keys(FLOOR).length / 2) {
+  const cinemaHistory = { ...history._cinemas };
+  for (const c of coverage) if (c.state === 'ok' || c.state === 'today-only') cinemaHistory[c.name] = { count: c.count, dates: c.dates };
+  await writeFile(`${root}data/_history.json`, JSON.stringify({ ...history, ...healthy, _cinemas: cinemaHistory }, null, 1));
+}
+
+if (coverageBlocked) process.exit(1);
 
 if (total < MIN_TOTAL) {
   console.error(`\n總場次 ${total} 低於門檻 ${MIN_TOTAL}，不發佈——保留線上既有版本比推一個殘缺的好。`);

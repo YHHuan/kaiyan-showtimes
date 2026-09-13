@@ -6,6 +6,8 @@ import { readFile, writeFile, readdir, mkdir, rm } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { matchKey, foldTitle, truncatedTitleKey, trustedMovieMeta } from './lib/common.mjs';
+import { normalizeMovieRecords, canonicalMetadata, MOVIE_ALIASES } from './lib/movie-identity.mjs';
+import { cinemaCoverage, selectScheduleRows, cinemaName, CINEMA_ALIASES } from './lib/cinema-coverage.mjs';
 
 const root = new URL('.', import.meta.url).pathname;
 const SITE_URL = (process.env.SITE_URL || 'https://yhhuan.github.io/kaiyan-showtimes').replace(/\/$/, '');
@@ -77,8 +79,14 @@ const AREA_ALIASES = {
 };
 for (const r of all) r.area = AREA_ALIASES[r.area] || r.area;
 
+let sourceMetadata = {};
+try { sourceMetadata = JSON.parse(await readFile(`${root}data/movie_meta.json`, 'utf8')); } catch {}
+const normalized = normalizeMovieRecords(selectScheduleRows(all, status), sourceMetadata);
+const coverage = cinemaCoverage(normalized, status, todayTPE).map(c => ({ ...c, url: safeHttpUrl(c.url) }));
+const identityIssues = [...new Set(normalized.filter(r => r.identityUncertain).map(r => r.movie))];
+
 const seen = new Set();
-const merged = all.filter((r) => {
+const merged = normalized.filter((r) => {
   if (!r.date || !r.time || !r.movie) return false;
   if (r.date < todayTPE) return false;
   const k = `${r.cinema}|${r.movie}|${r.date}|${r.time}|${r.hall || ''}|${(r.tags || []).join()}`;
@@ -94,6 +102,12 @@ try {
 } catch {
   console.log('  (無 movie_meta.json，跳過海報與簡介)');
 }
+const canonicalMeta = {};
+for (const [title, record] of Object.entries(meta)) {
+  const m = canonicalMetadata(title, record);
+  if (m && (!canonicalMeta[m.title] || record.matchVersion > canonicalMeta[m.title].matchVersion)) canonicalMeta[m.title] = m;
+}
+meta = canonicalMeta;
 
 // 海報要內嵌進單一 HTML。逐張存 data URI 太肥（66 張 WebP ≈ 368KB），
 // 改成用 ffmpeg 把全部海報拼成一張 sprite，前端用 background-position 取用——
@@ -160,6 +174,8 @@ const halls = intern();
 const tags = intern();
 const urls = intern();
 const dates = intern();
+// 缺資料的館也保留索引與查詢入口，不讓整間影城靜悄悄消失。
+for (const c of coverage) cinemas.id([c.name, c.area || '']);
 
 // ── 剩餘座位 ────────────────────────────────────────────
 // 新光／美麗新／in89 的來源有給剩餘席次。但「剩 44 席」本身無法判讀——
@@ -308,7 +324,7 @@ for (const [cinema, info] of Object.entries(prices)) {
     .map((t) => t.prices?.['全票'])
     .filter((n) => typeof n === 'number');
   if (!full.length) continue;
-  priceByCinema[cinema] = {
+  priceByCinema[cinemaName(cinema)] = {
     from: Math.min(...full),
     url: safeHttpUrl(info.url) || null,
     manual: /人工讀圖/.test(info.source || ''), // 這幾家的票價表是圖片，數字靠人工轉譯、不會自動更新
@@ -321,6 +337,7 @@ let geo = {};
 try {
   geo = JSON.parse(await readFile(`${root}data/cinemas.json`, 'utf8'));
 } catch {}
+for (const [name, value] of Object.entries(geo)) geo[cinemaName(name)] ||= value;
 
 // 電影 metadata 對齊 movies 索引（meta 的鍵是各來源原始片名，一樣用 matchKey 對上）
 const metaByKey = new Map();
@@ -331,6 +348,23 @@ for (const [k, v] of Object.entries(meta)) {
   if (!metaByKey.has(mk) || (v.synopsis && !metaByKey.get(mk).synopsis)) metaByKey.set(mk, v);
 }
 if (untrustedMeta) console.log(`  略過 ${untrustedMeta} 筆未核對電影版本的基本資料，請更新 movie_meta`);
+
+const runtimeEvidence = new Map();
+for (const r of merged) {
+  if (!(Number.isFinite(r.sourceRuntimeMin) && r.sourceRuntimeMin > 0)) continue;
+  const key = matchKey(r.movie);
+  if (!runtimeEvidence.has(key)) runtimeEvidence.set(key, new Set());
+  runtimeEvidence.get(key).add(r.sourceRuntimeMin);
+}
+for (const [key, values] of runtimeEvidence) {
+  const durations = [...values, metaByKey.get(key)?.runtimeMin].filter(Number.isFinite);
+  if (Math.max(...durations) - Math.min(...durations) > 5) {
+    metaByKey.delete(key);
+    identityIssues.push(`${key}（片長來源不一致，暫不套用基本資料）`);
+  } else if (!metaByKey.has(key)) {
+    metaByKey.set(key, { runtimeMin: [...values][0] });
+  }
+}
 
 // 先決定哪些片有海報（決定 sprite 的排列順序），再拼 sprite
 const posterPaths = [];
@@ -382,6 +416,10 @@ const payload = {
   packed,
   meta: metaByIdx,
   sprite: sprite ? { uri: sprite.uri, cols: SPRITE_COLS, rows: sprite.rows } : null,
+  coverage,
+  aliases: MOVIE_ALIASES,
+  cinemaAliases: CINEMA_ALIASES,
+  updatedAt: new Date().toISOString(),
 };
 
 // JSON 會直接放進 <script>。即使上游片名出現 </script> 也不能讓它提早關閉標籤；
@@ -421,7 +459,7 @@ const viaBackup = missing.filter(coveredByBackup).map((s) => SOURCE_NAMES[s]);
 
 const notice =
   (absent.length ? `本輪未取得：${absent.join('、')}，這幾家的場次暫時查不到。` : '') +
-  (viaBackup.length ? `${viaBackup.join('、')}官方來源今日取得失敗，改用開眼的資料，因此只有當天場次。` : '') +
+  (viaBackup.length ? `${viaBackup.join('、')}官方來源取得失敗，改用開眼已公布的日期；各館涵蓋範圍請見查詢旁的資料提示。` : '') +
   (lagging.length ? `沿用前一輪資料：${lagging.join('、')}。` : '') +
   (staleSources.length ? `已停用過期來源：${staleSources.join('、')}。` : '');
 
@@ -457,13 +495,15 @@ const siteStatus = {
     movies: movies.list.length,
     dates: dates.list.length,
   },
-  coverage: { firstDate: dates.list[0] || null, lastDate: dates.list.at(-1) || null },
+  coverage: { firstDate: dates.list[0] || null, lastDate: dates.list.at(-1) || null, cinemas: coverage },
   sources: [...present].sort().map((source) => ({
     id: source,
     name: SOURCE_NAMES[source] || source,
     ageHours: freshness[source] == null ? null : Number(freshness[source].toFixed(1)),
   })),
-  warnings: { absent, viaBackup, lagging, staleSources },
+  warnings: { absent, viaBackup, lagging, staleSources,
+    cinemas: coverage.filter(c => c.state !== 'ok').map(c => ({ name: c.name, state: c.state, failedDates: c.failedDates })),
+    identity: identityIssues },
 };
 await writeFile(`${root}out/site-status.json`, JSON.stringify(siteStatus, null, 2) + '\n');
 

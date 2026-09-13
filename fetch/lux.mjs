@@ -20,6 +20,8 @@ for (const id of ids) {
       cinema: '樂聲影城(西門町)',
       area: '台北市',
       movie: normTitle(title),
+      sourceMovieId: id,
+      sourceRuntimeMin: Number(html.match(/(?:片長|長度)\s*[|｜：:]?\s*(\d+)\s*(?:min|分)/i)?.[1]) || null,
       rating,
       date: s[1],
       time: s[2].padStart(5, '0'),

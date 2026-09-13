@@ -397,6 +397,9 @@
   .price.approx::after { content: "＊"; }
 
   .empty { text-align: center; color: var(--ink2); padding: 60px 16px; }
+  .coverage-note { color: var(--ink2); font-size: 13px; margin: 8px 0 12px; line-height: 1.7; }
+  .coverage-note summary { cursor: pointer; }
+  .coverage-note ul { padding-left: 20px; max-height: 220px; overflow-y: auto; }
   .empty b { display: block; font-size: 17px; color: var(--ink); margin-bottom: 6px; font-family: "Noto Serif TC", serif; }
   .more {
     display: block;
@@ -585,6 +588,7 @@
   </div>
 
   <div class="summary" id="summary"></div>
+  <div id="coverage-note" class="coverage-note" role="status" hidden></div>
   <p class="session-hint" id="session-hint" hidden>點場次旁的 ☆ 可收藏這一場；購票請點戲院名稱。</p>
   <main id="list" tabindex="-1"></main>
   <div class="toast" id="save-status" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -595,8 +599,8 @@
     <p>若您是影城業者，希望調整或移除本站呈現的貴公司場次資料，請至
       <a href="https://github.com/YHHuan/kaiyan-showtimes/issues" target="_blank" rel="noopener">GitHub Issues</a>
       告知，我們會儘速配合處理。</p>
-    <p>場次更新於 <b>__GENERATED__</b>，每天約 06:00、18:00（台灣時間）自動重抓。<span id="notice"></span>
-      實際場次與票種以各影城官方公告為準；威秀因官方站機器人防護，目前僅有開眼提供的當天場次。</p>
+    <p>場次更新於 <b>__GENERATED__</b>，每天早晚各一次自動重抓（台灣時間 05:17、17:17 啟動，完成時間可能延遲）。<span id="notice"></span>
+      實際場次與票種以各影城官方公告為準；威秀目前使用開眼已公布的多日場次。各館涵蓋日期不同，排程亦可能延遲。</p>
     <p>散場時間為估算（片長＋約 12 分鐘廣告），僅供參考。</p>
     <p>座位色點：<span class="seat s1"></span> 空位多　<span class="seat s2"></span> 剩一些　<span class="seat s3"></span> 快滿了。
       只有新光、美麗新、in89 的來源提供席次，而且是<b>抓取當下</b>的快照、不是即時，
@@ -720,7 +724,7 @@ var DATA = __DATA__;
   function sessionSnapshot(r) {
     return { movie: M[r[1]][0], cinema: C[r[0]][0], date: D[r[2]], mins: r[5], hall: H[r[3]] || "", tag: T[r[4]] || "" };
   }
-  function sessionKey(s) { return JSON.stringify([s.movie, s.cinema, s.date, s.mins, s.hall, s.tag]); }
+  function sessionKey(s) { return JSON.stringify([canonicalSavedName("movies", s.movie), canonicalSavedName("cinemas", s.cinema), s.date, s.mins, s.hall, s.tag]); }
   var sessionRows = new Map();
   ROWS.forEach(function (r) { sessionRows.set(sessionKey(sessionSnapshot(r)), r); });
   function sessionStart(s) { return Date.parse(s.date + "T00:00:00+08:00") + s.mins * 60000; }
@@ -746,13 +750,17 @@ var DATA = __DATA__;
     } catch (e) { return { movies: [], cinemas: [], sessions: [] }; }
   }
 
+  function canonicalSavedName(kind, name) {
+    var aliases = kind === "movies" ? DATA.aliases : DATA.cinemaAliases;
+    return aliases && Object.prototype.hasOwnProperty.call(aliases, name) ? aliases[name] : name;
+  }
   var favorites = readFavorites();
   function favoriteKey(kind, idx) { return kind === "movies" ? M[idx][0] : C[idx][0]; }
-  function isFavorite(kind, idx) { return favorites[kind].indexOf(favoriteKey(kind, idx)) >= 0; }
+  function isFavorite(kind, idx) { return savedContains(kind, favoriteKey(kind, idx)); }
   function savedContains(kind, key) {
     return kind === "sessions"
       ? favorites.sessions.some(function (s) { return sessionKey(s) === key; })
-      : favorites[kind].indexOf(key) >= 0;
+      : favorites[kind].some(function (name) { return canonicalSavedName(kind, name) === canonicalSavedName(kind, key); });
   }
   var toastTimer;
   function saveMessage(message) {
@@ -778,8 +786,10 @@ var DATA = __DATA__;
     var key = kind === "sessions" ? sessionKey(value) : value;
     // 先讀另一分頁最近的變動，減少用舊清單覆蓋新收藏的機會。
     var next = readFavorites();
-    var at = kind === "sessions" ? next.sessions.findIndex(function (s) { return sessionKey(s) === key; }) : next[kind].indexOf(key);
-    if (at >= 0) next[kind].splice(at, 1); else next[kind].push(value);
+    var at = kind === "sessions" ? next.sessions.findIndex(function (s) { return sessionKey(s) === key; })
+      : next[kind].findIndex(function (name) { return canonicalSavedName(kind, name) === canonicalSavedName(kind, key); });
+    if (at >= 0 && kind !== "sessions") next[kind] = next[kind].filter(function (name) { return canonicalSavedName(kind, name) !== canonicalSavedName(kind, key); });
+    else if (at >= 0) next[kind].splice(at, 1); else next[kind].push(value);
     var saved = kind === "sessions"
       ? store.set("sessions", JSON.stringify(next.sessions))
       : store.set("favorites", JSON.stringify({ movies: next.movies, cinemas: next.cinemas }));
@@ -871,7 +881,7 @@ var DATA = __DATA__;
   function p2(n) { return n < 10 ? "0" + n : "" + n; }
   function toMins(t) { return (+t.slice(0, 2)) * 60 + (+t.slice(3, 5)); }
   var NOW = taipeiNow();
-  function defaultDate() { return D.find(function (d) { return d >= NOW.date; }) || NOW.date; }
+  function defaultDate() { return NOW.date; }
   state.date = defaultDate();
 
   function el(tag, cls, text) {
@@ -887,6 +897,7 @@ var DATA = __DATA__;
     var single = state.movie != null;
     // 單片模式下這排變成可複選的篩選器（都不選＝全部日期）；平常則是單選某一天
     var showDates = (single ? datesWithMovie(state.movie) : D).filter(function (d) { return d >= NOW.date; });
+    if (!single && showDates.indexOf(NOW.date) < 0) showDates.unshift(NOW.date);
     showDates.forEach(function (d) {
       var b = el("button", "day");
       var dt = new Date(d + "T00:00:00");
@@ -1018,24 +1029,30 @@ var DATA = __DATA__;
       if (!favorites[kind].length) return;
       var box = section(kind === "movies" ? "想看的電影" : "常去的戲院", favorites[kind].length);
       favorites[kind].forEach(function (name) {
-        var idx = (kind === "movies" ? M : C).findIndex(function (info) { return info[0] === name; });
+        var canonical = canonicalSavedName(kind, name);
+        var idx = (kind === "movies" ? M : C).findIndex(function (info) { return info[0] === canonical; });
         var upcoming = idx < 0 ? [] : ROWS.filter(function (r) { return r[kind === "movies" ? 1 : 0] === idx && sessionStart(sessionSnapshot(r)) > Date.now(); });
         var item = el("div", "saved-item");
         var info = el("div");
-        var title = el(upcoming.length ? "button" : "span", "titlebtn planmovie", name);
+        var title = el(upcoming.length || kind === "movies" ? "button" : "span", "titlebtn planmovie", name);
+        if (!upcoming.length && kind === "movies") title.onclick = function () {
+          resetQuery(); state.q = name; render();
+        };
         if (upcoming.length) title.onclick = function () {
           resetQuery();
           if (kind === "movies") openMovie(idx);
           else {
             state.view = "cinema";
-            state.q = name;
+            state.q = canonical;
             state.date = upcoming.map(function (r) { return D[r[2]]; }).sort()[0];
             render();
             window.scrollTo({ top: 0, behavior: "instant" });
           }
         };
         info.appendChild(title);
-        info.appendChild(el("div", "saved-status", upcoming.length ? "查看 " + upcoming.length + " 個未來場次 →" : "目前未查到未來場次，收藏仍會保留"));
+        info.appendChild(el("div", "saved-status", upcoming.length ? "查看 " + upcoming.length + " 個未來場次 →"
+          : name === "驀然回首" ? "舊名稱可能包含動畫／真人版，點片名重新選擇版本；收藏仍會保留"
+          : "目前未查到未來場次，收藏仍會保留"));
         item.appendChild(info);
         item.appendChild(namedFavoriteButton(kind, name, name));
         box.appendChild(item);
@@ -1179,7 +1196,9 @@ var DATA = __DATA__;
     }
     if (!intent.text) return true;
     var corpus = searchCompact([
-      M[r[1]][0], M[r[1]][1], C[r[0]][0], C[r[0]][1], tag, hall, formats.join(" ")
+      M[r[1]][0], M[r[1]][1], C[r[0]][0], C[r[0]][1], tag, hall, formats.join(" "),
+      Object.keys(DATA.aliases || {}).filter(function (a) { return DATA.aliases[a] === M[r[1]][0]; }).join(" "),
+      Object.keys(DATA.cinemaAliases || {}).filter(function (a) { return DATA.cinemaAliases[a] === C[r[0]][0]; }).join(" ")
     ].join(" "));
     return corpus.indexOf(intent.text) >= 0;
   }
@@ -1816,8 +1835,10 @@ var DATA = __DATA__;
     state.saved = p.get("saved") === "1";
     var m = p.get("m");
     if (m) {
+      m = canonicalSavedName("movies", m);
       // 用片名找回索引；片可能已經下檔，找不到就當一般模式處理
       for (var mi = 0; mi < M.length; mi++) if (M[mi][0] === m) { state.movie = mi; break; }
+      if (state.movie == null) state.q = m;
       var dd = p.get("dd");
       if (state.movie != null && dd) state.dates = dd.split(",").filter(function (x) { return D.indexOf(x) >= 0; });
     }
@@ -1844,6 +1865,39 @@ var DATA = __DATA__;
     if (["3", "5", "10", "20"].indexOf(p.get("md")) >= 0) state.maxDist = p.get("md");
   }
 
+  function renderCoverage() {
+    var box = document.getElementById("coverage-note");
+    box.textContent = "";
+    var selected = state.movie != null ? (state.dates.length ? state.dates : datesWithMovie(state.movie).filter(function (d) { return d >= NOW.date; })) : [state.date];
+    if (!selected.length) selected = [state.date];
+    var intent = parseSearchQuery(state.q);
+    var covered = (DATA.coverage || []).filter(function (c) {
+      return (state.area === "全部" || c.area === state.area) && (!intent.areas || intent.areas.indexOf(c.area) >= 0);
+    });
+    var named = covered.filter(function (c) { return intent.text.length >= 2 && searchCompact(c.name).indexOf(intent.text) >= 0; });
+    if (named.length) covered = named;
+    var gaps = covered.filter(function (c) { return selected.some(function (d) {
+      return c.dates.indexOf(d) < 0 || (c.failedDates || []).indexOf(d) >= 0;
+    }); });
+    box.hidden = state.saved || !gaps.length;
+    if (box.hidden) return;
+    var details = el("details"), summary = el("summary");
+    summary.textContent = gaps.length + " 家影城的所選日期資料不足或更新失敗，結果可能不完整（查看範圍）";
+    details.appendChild(summary);
+    details.appendChild(el("p", null, "未取得資料不代表沒有放映。各館公布日期不同，請以官方場次為準；本站不會把昨天的場次當作今天。"));
+    var ul = el("ul");
+    gaps.forEach(function (c) {
+      var li = el("li"), label = c.name + "：";
+      label += c.state === "missing" ? "尚未取得有效場次" : "已收錄 " + c.dates.filter(function (d) { return d >= NOW.date; }).map(function (d) { return d.slice(5).replace("-", "/"); }).join("、");
+      if (c.failedDates && c.failedDates.length) label += "；部分日期抓取失敗";
+      if (c.lastSuccessAt) label += "；最近取得 " + new Date(c.lastSuccessAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false });
+      li.appendChild(document.createTextNode(label + " "));
+      if (/^https?:\/\//.test(c.url || "")) { var link = el("a", null, "官方查詢"); link.href = c.url; link.target = "_blank"; link.rel = "noopener noreferrer"; li.appendChild(link); }
+      ul.appendChild(li);
+    });
+    details.appendChild(ul); box.appendChild(details);
+  }
+
   function render() {
     var before = NOW.date;
     NOW = taipeiNow();
@@ -1853,6 +1907,7 @@ var DATA = __DATA__;
     renderAreaOptions();
     renderLangOptions();
     renderFormatOptions();
+    renderCoverage();
     updateFavoriteControls();
     document.querySelector(".controls").hidden = state.saved;
     var sessionHint = document.getElementById("session-hint");
@@ -1935,7 +1990,7 @@ var DATA = __DATA__;
       e.appendChild(el("div", null, wantsMotion
         ? "4D 只會比對 4DX／MX4D；ULTRA 3D 是 3D 規格，不會混在一起。可換日期或放寬其他條件再試。"
         : matchedCinemas.length
-        ? "目前日期或篩選條件沒有可顯示場次；部分獨立戲院的備援來源只提供當天資料。"
+        ? "目前日期或篩選條件沒有可顯示場次。請查看上方資料範圍；尚未取得的日期，不代表戲院沒有排片。"
         : state.view === "plan" && state.maxDist !== "all" && !myPos
         ? "要使用距離上限，請先允許「離我最近」取得定位。"
         : state.view === "plan" ? "把最早開演調早、最晚散場調晚，或放寬票價與距離再試。" : "換個日期、放寬地區或時段試試。"));

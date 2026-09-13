@@ -2,10 +2,10 @@ name: 更新場次
 
 on:
   schedule:
-    # 台北時間 06:00 與 18:00。各影城多半在前一天 20:00 前公布隔日場次，
-    # 早上抓到完整的今天，傍晚補當天的異動與新開放的預售。
-    - cron: '0 22 * * *'
-    - cron: '0 10 * * *'
+    # 台北時間 05:17 與 17:17 提前準備早晚資料，避開整點尖峰；不保證準點上線。
+    # 保持每天兩次、純程式抓取。跨日可用性主要靠多日場次，不依賴 cron 精準觸發。
+    - cron: '17 21 * * *'
+    - cron: '17 9 * * *'
   workflow_dispatch:
     inputs:
       rebuild_only:
@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 
 # runner 預設是 UTC。所有「今天是哪一天」的判斷都必須以台北為準，
-# 否則台北清晨那輪（22:00 UTC）會去抓前一天的場次，建置時再被整批當成過期丟掉。
+# 否則台北清晨那輪（21:17 UTC）會去抓前一天的場次，建置時再被整批當成過期丟掉。
 env:
   TZ: Asia/Taipei
 
@@ -125,9 +125,8 @@ jobs:
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
-          # check_health 把異常寫在 stdout，這裡重跑一次只為了取結論（很快，不打網路）
-          REPORT=$(node check_health.mjs 2>&1 || true)
-          BAD=$(printf '%s\n' "$REPORT" | grep -E '^  (✗|!)' || true)
+          # 使用同一次檢查的報告，不能重跑並覆蓋歷史基準，掩蓋掉館／筆數骤減。
+          BAD=$(node --input-type=module -e 'import fs from "node:fs"; try { const r=JSON.parse(fs.readFileSync("data/_health.json","utf8")); console.log([...r.problems,...r.warnings].join("\n").slice(0,3500)); } catch { console.log("本輪未產生健康檢查報告，請查看執行紀錄"); }')
           if [ -n "$BAD" ]; then
             TEXT=$(printf '開演｜本輪有來源異常\n\n%s\n\n%s' "$BAD" "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")
             curl -sS -o /dev/null --max-time 20 \

@@ -37,6 +37,11 @@ const base = `http://127.0.0.1:${address.port}/`;
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+// 功能測試不應因部署在深夜或跨日而隨機失敗；資料新鮮度另由 health 負責。
+const generatedStatus = JSON.parse(await readFile(resolve(out, 'site-status.json'), 'utf8'));
+const fixtureDay = generatedStatus.coverage.firstDate;
+if (!/^\d{4}-\d{2}-\d{2}$/.test(fixtureDay || '')) throw new Error('正式產物缺少可測日期');
+await page.clock.setFixedTime(new Date(fixtureDay + 'T00:00:00+08:00'));
 const errors = [];
 page.on('pageerror', (err) => errors.push(err.message));
 page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
@@ -181,14 +186,12 @@ try {
       else if (/SCREEN\s*X/i.test(raw)) format = 'ScreenX';
       if (!format) continue;
       const area = DATA.cinemas[ci][1] || '';
-      return { di, query: `${DATA.movies[mi][0]}${format}${area.replace(/[市縣]$/, '')}` };
+      return { date: DATA.dates[di], query: `${DATA.movies[mi][0]}${format}${area.replace(/[市縣]$/, '')}` };
     }
     return null;
   });
   if (!compound) throw new Error('找不到可測試自然語句搜尋的特殊影廳場次');
-  await page.locator('.day').nth(compound.di).click();
-  await page.locator('#q').fill(compound.query);
-  await page.locator('#q').dispatchEvent('input');
+  await page.goto(base + '?' + new URLSearchParams({ d: compound.date, q: compound.query, n: '1' }), { waitUntil: 'domcontentloaded' });
   if (!await page.locator('.card').count()) throw new Error(`自然語句搜尋沒有找到場次：${compound.query}`);
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await ensureVisibleMovieCards();

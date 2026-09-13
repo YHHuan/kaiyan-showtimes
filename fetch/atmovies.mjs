@@ -5,8 +5,7 @@
 // 美麗新（官方站會拒絕 GitHub Actions 雲端 IP），以及王牌映画（官網只接受部分
 // 網路區域，GitHub runner 與公開雲端代理皆連線失敗）。
 //
-// 開眼本身是 server-rendered HTML，好抓，但限制是場次頁只顯示「當天」，沒有日期參數可翻頁
-// （實測 /showtime/{code}/a02/ 不吃 date query，也沒找到任何翻頁連結），所以本檔只產出今天一天。
+// 開眼現已提供 /YYYYMMDD/ 日期連結；循實際公布的日期抓取，不猜測尚未公布的檔期。
 //
 // 已排除的重複來源：
 //   - 光點華山電影館、府中15：已有 fetch/arthouse.mjs 直接抓官網（spot-hs.org.tw /
@@ -15,14 +14,16 @@
 //   - 秀泰、國賓、美麗華、喜樂時代、in89、樂聲：這些連鎖已有其他 fetch/*.mjs 涵蓋
 //     官方資料，不用開眼補。
 //   - 威秀／MUVIE：我們從來沒有官方資料，這裡無條件抓（見下方 VIESHOW）。
-//   - 新光、美麗新：官方來源本機抓得到，只在它抓失敗／資料過期時才用開眼頂替，避免
-//     同一館兩份不同命名/來源的資料重複上架（見下方備援設定與 shouldUseSourceBackup()）。
+//   - 新光、美麗新、王牌：官方與備援都抓取，建站逐館逐日選用（lib/cinema-coverage.mjs），
+//     避免同一館兩份不同命名/來源的資料重複上架，也避免全來源總量掩蓋單館缺漏。
 //
 // 編碼：伺服器回應 Content-Type: text/html;charset=UTF-8，且動態內容（片名/場次）本身
 // 就是合法 UTF-8；只有頁面最上方少數寫死的 <meta name="author"/"copyright"> 樣板字串是舊站
 // 遺留的亂碼（U+FFFD），跟場次資料無關，不影響解析。
 import { readFile } from 'node:fs/promises';
-import { politeFetch, saveRecords, normTitle, todayISO } from '../lib/common.mjs';
+import { politeFetch, saveRecords, todayISO } from '../lib/common.mjs';
+import { parseAtmovies } from '../lib/schedule-parsers.mjs';
+import { SK_CINEMAS } from '../lib/cinema-coverage.mjs';
 
 const BASE = 'https://www.atmovies.com.tw';
 
@@ -34,8 +35,8 @@ const BASE = 'https://www.atmovies.com.tw';
 // （實測 a01 是基隆，不是台北）、a03=桃園、a35=新竹、a04=台中、a06=台南、a07=高雄。
 // 白名單只收「非九大連鎖」的獨立單館／二輪戲院，逐一查證經營者後才收錄（見各行註解），
 // 且與 fetch/arthouse.mjs 互不重複。
-// 光點台北、真善美、TFAI 已改由 fetch/arthouse2.mjs 直接抓官方來源（有未來多天檔期，
-// 開眼只有當天），從這裡移除避免同一場次兩個來源、標籤不一致時冒出重複。
+// 光點台北、真善美、TFAI 已由 fetch/arthouse2.mjs 抓官方／售票來源，
+// 從這裡移除避免同一場次兩個來源、標籤不一致時冒出重複。
 const ARTHOUSE = {
   // -- 使用者指名／本任務起因：查「愛重奏」在誠品／光點查不到 --
   t02a08: { name: '誠品電影院', area: '台北市', region: 'a02', official: 'https://meet.eslite.com/tw/tc/gallery/movieschedule/201803020001' }, // 官網 arthouse.eslite.com 是舊式 ASP.NET WebForms，純 GET 抓不到場次時間
@@ -51,7 +52,7 @@ const ARTHOUSE = {
   // 逐一 WebSearch＋curl 查證經營者：均為獨立單館或僅 1~2 館的小型品牌，非威秀/秀泰/
   // 國賓/新光/美麗新/美麗華/喜樂時代/in89/樂聲任一連鎖旗下。其中多數官網其實也是
   // server-rendered（可另建 fetch/*.mjs 直接抓，資料會比開眼更完整），但目前本專案
-  // 還沒有任何來源涵蓋它們，先用開眼補上「至少有今天」。
+  // 還沒有其他來源涵蓋它們，使用開眼已公布的多日資料。
   t02a03: { name: '微風影城', area: '台北市', region: 'a02', official: 'https://breezecinemas.tixi.com.tw/' }, // 2022 起微風集團自營，非國賓/威秀旗下
   t02a05: { name: '總督影城', area: '台北市', region: 'a02', official: 'https://governor.tixi.com.tw/' }, // 獨立單館，總督影城事業股份有限公司
   t02a06: { name: '哈拉影城', area: '台北市', region: 'a02', official: 'http://halarcity.com.tw/browsing/Cinemas/Details/0000000001' }, // 哈拉生活集團，2008年起脫離秀泰代管，獨立經營
@@ -94,8 +95,8 @@ const VIESHOW = {
 };
 
 // 新光影城（skcinemas.com，5 館）：官方來源 fetch/skcinemas.mjs 本機抓得到，但雲端 CI
-// 連不上（見檔頭說明），只在官方來源缺席／過期時才用這份開眼備援頂替，見
-// shouldUseSkcinemasBackup()。代碼查證方式同 VIESHOW：curl 對應地區頁，確認每一筆的
+// 曾連不上（見檔頭說明），建站依分館與日期決定是否以開眼備援頂替。
+// 代碼查證方式同 VIESHOW：curl 對應地區頁，確認每一筆的
 // 「網站」超連結都指向 https://www.skcinemas.com/sessions（與 fetch/skcinemas.mjs 抓的
 // 官方站同一個網域），且地址與 skcinemas.mjs 裡的館名一一對應（西寧南路＝台北獅子林、
 // 忠誠路＝台北天母、中壢區春德路＝桃園青埔【行政區屬中壢區】、中港路＝台中中港、
@@ -116,115 +117,61 @@ const MIRANEW_BACKUP = {
   t03301: { name: '桃園台茂美麗新影城', area: '桃園市', region: 'a03', official: 'https://www.miranewcinemas.com/booking/timetable' },
 };
 
-// 王牌官方頁是第一來源；若 GitHub Actions 所在的海外網路連不上，就用開眼的當日場次
+// 王牌官方頁是第一來源；若 GitHub Actions 所在的海外網路連不上，就用開眼的多日場次
 // 補上。t04428 由開眼台中地區清單與官網地址、館名交叉核對。
 const ACECINEMA_BACKUP = {
   t04428: { name: '王牌映画影城', area: '台中市', region: 'a04', official: 'https://www.acecinema.com.tw/movie/all' },
 };
 
-// 是否啟用開眼備援：讀 data/_status.json；來源缺席、筆數太少，或 fetchedAt 距今超過
-// 26 小時，就視為官方抓取失敗／過期。官方資料還新鮮時略過，避免同一館出現兩份資料。
-async function shouldUseSourceBackup(source, minCount) {
-  const statusPath = new URL('../data/_status.json', import.meta.url).pathname;
-  let status;
+
+const CINEMAS = { ...ARTHOUSE, ...VIESHOW, ...SKCINEMAS_BACKUP, ...MIRANEW_BACKUP, ...ACECINEMA_BACKUP };
+// 官方與備援都保留，建站逐館逐日選新鮮官方優先；不能因其他分館總筆數夠多就略過漏館。
+for (const c of Object.values(CINEMAS)) {
+  const sk = SK_CINEMAS.find(x => x.name === c.name);
+  if (sk) c.official = 'https://www.skcinemas.com/Sessions/Sessions?cinemaId=' + sk.id;
+}
+const path = new URL('../data/atmovies.json', import.meta.url).pathname;
+let previous = [], status = {};
+try { previous = JSON.parse(await readFile(path, 'utf8')); } catch {}
+try { status = JSON.parse(await readFile(new URL('../data/_status.json', import.meta.url), 'utf8')); } catch {}
+const today = todayISO(), records = [], cinemas = {};
+const retain = (name, date) => previous.filter(r => r.cinema === name && r.date >= today && (!date || r.date === date))
+  .map(r => ({ ...r, fetchedAt: r.fetchedAt || status.atmovies?.fetchedAt || '1970-01-01T00:00:00Z' }));
+for (const [code, config] of Object.entries(CINEMAS)) {
+  const rootUrl = BASE + '/showtime/' + code + '/' + config.region + '/';
+  const configWithCode = { ...config, code, expectedDate: today };
+  let first;
   try {
-    status = JSON.parse(await readFile(statusPath, 'utf8'));
-  } catch {
-    return true; // 讀不到狀態檔，視同官方來源缺席
-  }
-  const current = status[source];
-  if (!current?.fetchedAt) return true;
-  // 光看時間戳不夠：抓取失敗時仍會寫入一筆 count 為 0、時間卻很新的狀態，
-  // 只檢查新鮮度會誤以為官方資料好好的，備援因此不啟動（CI 上實際發生過）。
-  if (!(current.count > minCount)) return true;
-  const ageHours = (Date.now() - new Date(current.fetchedAt).getTime()) / 3600000;
-  return !(ageHours <= 26);
-}
-
-const CINEMAS = { ...ARTHOUSE, ...VIESHOW };
-if (await shouldUseSourceBackup('skcinemas', 300)) {
-  Object.assign(CINEMAS, SKCINEMAS_BACKUP);
-  console.log('  [新光] 官方來源缺席、過期或抓取失敗，啟用開眼備援');
-} else {
-  console.log('  [新光] 官方來源新鮮，略過開眼備援，避免重複');
-}
-if (await shouldUseSourceBackup('miranew', 100)) {
-  Object.assign(CINEMAS, MIRANEW_BACKUP);
-  console.log('  [美麗新] 官方來源缺席、過期或抓取失敗，啟用開眼備援');
-} else {
-  console.log('  [美麗新] 官方來源新鮮，略過開眼備援，避免重複');
-}
-if (await shouldUseSourceBackup('acecinema', 10)) {
-  Object.assign(CINEMAS, ACECINEMA_BACKUP);
-  console.log('  [王牌映画] 官方來源缺席、過期或抓取失敗，啟用開眼備援');
-} else {
-  console.log('  [王牌映画] 官方來源新鮮，略過開眼備援，避免重複');
-}
-
-// 分級圖示代碼 → 中文級別。開眼用 <img src="/images/cer_X.gif"> 標示分級，沒有 alt 文字，
-// 對照台灣現行五級分級制度（普遍/保護/輔12/輔15/限制）逐一實測比對出來。
-const CERT = { G: '普遍級', P: '保護級', F2: '輔12級', F5: '輔15級', R: '限制級' };
-
-const date = todayISO(); // 開眼場次頁沒有日期參數可翻頁，只能拿到「今天」
-const records = [];
-
-for (const [code, { name, area, region, official }] of Object.entries(CINEMAS)) {
-  const url = `${BASE}/showtime/${code}/${region}/`;
-  // 連結優先給該戲院自己的場次/訂票頁——開眼是我們的資料來源，但使用者要買票得回官網。
-  // official 取自開眼戲院頁上的「網站:」欄位。
-  const linkUrl = official || url;
-  let html;
-  try {
-    html = await politeFetch(url);
+    const html = await politeFetch(rootUrl);
+    try { first = parseAtmovies(html, configWithCode); }
+    catch (e) {
+      // 午夜時根頁快取可能仍是昨天；明確日期頁仍須通過頁面日期檢查。
+      if (!e.message.includes('場次日期不符')) throw e;
+      first = parseAtmovies(await politeFetch(rootUrl + today.replace(/-/g, '') + '/'), configWithCode);
+    }
   } catch (e) {
-    console.log(`  ${name}: ${e.message}`);
+    cinemas[config.name] = { state: 'failed', area: config.area, url: config.official, error: e.message };
+    records.push(...retain(config.name));
+    console.log('  ' + config.name + ': 抓取失敗，保留尚未過期資料；' + e.message);
     continue;
   }
-
-  let count = 0;
-  // 每部片一個 <ul id="theaterShowtimeTable"> 區塊
-  for (const rawBlock of html.split('<ul id="theaterShowtimeTable">').slice(1)) {
-    // 只取到本片區塊結束（<!-- theaterShowtimeBlock ... -->），避免最後一部片的區塊
-    // 一路吃到頁尾側欄（快速選單/廣告），裡面文字剛好也可能長得像 HH：MM
-    const block = rawBlock.split('<!-- theaterShowtimeBlock')[0];
-
-    // 片名錨點常缺 </a> 收尾（開眼原始碼本身如此，如「魯冰花(數位修復版)</li>」），
-    // 用 [^<] 吃到下一個 < 就好，不管後面接的是 </a> 還是 </li>
-    const titleM = block.match(/<li class="filmTitle">\s*(?:<img[^>]*>\s*)?<a href="\/movie\/\w+\/">([^<]*)/);
-    if (!titleM) continue;
-
-    // 片名尾端的 (數位修復版)(影展) 這類版本標記，逐一剝出來放進 tags
-    let rawTitle = titleM[1].trim();
-    const tags = [];
-    let m;
-    while ((m = rawTitle.match(/\(([^()]*)\)\s*$/))) {
-      tags.unshift(m[1]);
-      rawTitle = rawTitle.slice(0, m.index).trim();
-    }
-    const movie = normTitle(rawTitle);
-    if (!movie) continue;
-
-    const certM = block.match(/cer_(\w+)\.gif/);
-    const rating = certM ? CERT[certM[1]] || certM[1] : null;
-
-    // 場次時間是全形冒號 HH：MM（不是 ASCII 的 :），開眼原始碼就是這樣寫的
-    for (const t of block.matchAll(/<li>(\d{1,2})：(\d{2})<\/li>/g)) {
-      records.push({
-        source: 'atmovies',
-        cinema: name,
-        area,
-        movie,
-        rating,
-        date,
-        time: `${t[1].padStart(2, '0')}:${t[2]}`,
-        hall: null, // 開眼這些館的場次頁沒有標廳別
-        tags,
-        url: linkUrl,
-      });
-      count++;
+  const failedDates = [], fresh = [];
+  for (const date of first.dates) {
+    if (date < today) continue;
+    try {
+      const parsed = date === today ? first : parseAtmovies(
+        await politeFetch(rootUrl + date.replace(/-/g, '') + '/'), { ...configWithCode, expectedDate: date });
+      fresh.push(...parsed.records.map(r => ({ ...r, fetchedAt: new Date().toISOString() })));
+    } catch (e) {
+      failedDates.push(date);
+      records.push(...retain(config.name, date));
+      console.log('  ' + config.name + ' ' + date + ': ' + e.message);
     }
   }
-  console.log(`  ${name}: ${count} 筆`);
+  records.push(...fresh);
+  cinemas[config.name] = { state: failedDates.length ? 'partial' : 'ok', area: config.area, url: config.official,
+    announcedDates: first.dates, failedDates, ...(fresh.length ? { lastSuccessAt: new Date().toISOString() } : {}) };
+  console.log('  ' + config.name + ': ' + fresh.length + ' 筆 / ' + new Set(fresh.map(r => r.date)).size + ' 天'
+    + (failedDates.length ? '；' + failedDates.length + ' 天取得失敗' : ''));
 }
-
-await saveRecords(new URL('../data/atmovies.json', import.meta.url).pathname, records);
+await saveRecords(path, records, { cinemas, parserVersion: 2 });

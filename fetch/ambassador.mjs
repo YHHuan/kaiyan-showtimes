@@ -31,6 +31,9 @@ for (const th of theaters) {
     for (const item of html.split(/<div class='showtime-item'>/).slice(1)) {
       const t = item.match(/<h3><a [^>]*>([^<]+)<span class='eng'>([^<]*)<\/span>/);
       if (!t) continue;
+      const length = item.match(/(\d+)時\s*(\d+)分/) || item.match(/()\s*(\d+)分/);
+      const sourceRuntimeMin = length ? Number(length[1] || 0) * 60 + Number(length[2]) : null;
+      const sourceMovieId = item.match(/MovieContent\?MID=([a-f0-9-]{36})/)?.[1] || null;
       const rating = (item.match(/tag_s@2x\.png'[^>]*>([^<]*級[^<]*)</) || [])[1]?.trim() || null;
       // 版本區塊：<p class='tag-seat'>(數位‧英文版)片名</p> 之後接場次 <ul>
       const parts = item.split(/<p class='tag-seat'>/).slice(1);
@@ -42,6 +45,8 @@ for (const th of theaters) {
             cinema: th.name,
             area: th.area,
             movie: normTitle(t[1].trim()),
+            sourceMovieId,
+            sourceRuntimeMin,
             movieEn: t[2].trim() || null,
             rating,
             date,

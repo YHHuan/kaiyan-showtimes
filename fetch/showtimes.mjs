@@ -25,6 +25,8 @@ for (const [corpId, group] of Object.entries(payload.eventsForCorporations)) {
       cinema: corp.name,
       area: corp.area,
       movie: normTitle(prog.name),
+      sourceMovieId: String(prog.id),
+      sourceRuntimeMin: typeof prog.duration === 'number' ? Math.round(prog.duration / 60) : null,
       movieEn: prog.nameAlternative || null,
       rating: RATING[prog.rating] || prog.rating || null,
       date: (ev.listedAt || ev.startedAt).slice(0, 10),

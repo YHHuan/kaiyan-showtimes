@@ -25,6 +25,7 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { politeFetch, normTitle, todayISO, matchKey, resolveMovieKey, trustedMovieMeta } from '../lib/common.mjs';
+import { identifyMovie, normalizeMovieRecords } from '../lib/movie-identity.mjs';
 
 import { tmpdir } from 'node:os';
 
@@ -128,6 +129,7 @@ async function fetchShowtimesBootstrap() {
   for (const p of programs) {
     out.push({
       source: 'showtimes',
+      sourceMovieId: String(p.id),
       sourceTitle: p.name,
       en: cleanEn(p.nameAlternative),
       posterUrl: p.coverImagePortrait?.url || null,
@@ -175,6 +177,7 @@ async function fetchCenturyAsia() {
     }
     out.push({
       source: 'centuryasia',
+      sourceMovieId: String(m.programid),
       sourceTitle: m.cname,
       en: cleanEn(m.ename),
       posterUrl: m.img || null,
@@ -245,6 +248,7 @@ async function fetchAmbassador() {
     }
     out.push({
       source: 'ambassador',
+      sourceMovieId: mid,
       sourceTitle: rec.title,
       en: rec.en,
       posterUrl: rec.posterUrl,
@@ -299,6 +303,7 @@ async function fetchLux() {
     const cast = cleanPeople((h3s.find((s) => /^演員\s*[|｜]/.test(s)) || '').replace(/^演員\s*[|｜]\s*/, ''));
     out.push({
       source: 'lux',
+      sourceMovieId: String(id),
       sourceTitle: title,
       en,
       posterUrl: posterByFilm.get(id) || null,
@@ -522,9 +527,13 @@ function mergeGroup(candidates) {
   });
   const base = sorted[0];
   const merged = { matchedTitle: base.sourceTitle, en: base.en, posterUrl: base.posterUrl, synopsis: base.synopsis, rating: base.rating, runtimeMin: base.runtimeMin, directors: base.directors || [], cast: base.cast || [] };
+  merged.sourceIds = sorted.filter(c => c.sourceMovieId && !(base.runtimeMin && c.runtimeMin && Math.abs(base.runtimeMin - c.runtimeMin) > 5))
+    .map(c => ({ source: c.source, id: c.sourceMovieId, rawTitle: c.rawSourceTitle || c.sourceTitle, runtimeMin: c.runtimeMin }));
   const sources = new Set([base.source]);
   for (const c of sorted.slice(1)) {
     let contributed = false;
+    // 片名相同也可能是重拍／剪輯版本；片長矛盾時不可混搭海報、導演與演員。
+    if (base.runtimeMin && c.runtimeMin && Math.abs(base.runtimeMin - c.runtimeMin) > 5) continue;
     for (const k of ['en', 'posterUrl', 'synopsis', 'rating', 'runtimeMin', 'directors', 'cast']) {
       if (!hasValue(merged[k]) && hasValue(c[k])) {
         merged[k] = c[k];
@@ -612,8 +621,10 @@ async function loadWantedTitles() {
     try {
       const rows = JSON.parse(await readFile(new URL(f, dataDirUrl), 'utf8'));
       if (!Array.isArray(rows)) continue;
-      for (const r of rows) {
+      for (const r of normalizeMovieRecords(rows)) {
         if (!r || !r.movie) continue;
+        if (r.date && r.date < todayISO()) continue;
+        if (r.identityUncertain) continue;
         titles.add(r.movie);
         if (r.rating && !ratingFallback.has(r.movie)) ratingFallback.set(r.movie, r.rating);
       }
@@ -645,6 +656,10 @@ async function main() {
 
   const groups = new Map();
   for (const c of candidates) {
+    const identity = identifyMovie(c);
+    if (identity.uncertain) continue;
+    c.rawSourceTitle = c.sourceTitle;
+    c.sourceTitle = identity.movie;
     const lk = looseKey(c.sourceTitle);
     if (!lk) continue;
     if (!groups.has(lk)) groups.set(lk, []);
@@ -703,8 +718,9 @@ async function main() {
     const rating = rec.rating || ratingFallback.get(title) || null;
     const entry = {
       title,
-      matchVersion: 2,
+      matchVersion: 3,
       matchedTitle: rec.matchedTitle,
+      sourceIds: rec.sourceIds || [],
       en: rec.en || null,
       posterUrl: rec.posterUrl || null,
       synopsis,
@@ -735,7 +751,7 @@ async function main() {
 async function needsMetadataUpgrade() {
   try {
     const entries = Object.entries(JSON.parse(await readFile(new URL('../data/movie_meta.json', import.meta.url), 'utf8')));
-    return !entries.length || entries.some(([title, rec]) => !trustedMovieMeta(title, rec));
+    return !entries.length || entries.some(([title, rec]) => rec.matchVersion !== 3 || !trustedMovieMeta(title, rec));
   } catch { return true; }
 }
 

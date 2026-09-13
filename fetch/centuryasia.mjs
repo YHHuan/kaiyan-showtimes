@@ -10,6 +10,8 @@
 //      → 回傳當天各廳場次；此站前端日期選單固定顯示「今天起 14 天」，故直接迴圈 14 天。
 // 全程唯讀 GET/POST 查詢頁與查詢用 AJAX，不觸碰 buyticket_process 等下單流程。
 import { politeFetch, saveRecords, normTitle, todayISO } from '../lib/common.mjs';
+import { identifyMovie } from '../lib/movie-identity.mjs';
+import { parseCenturyMovieEvidence } from '../lib/schedule-parsers.mjs';
 
 const BASE = 'https://www.centuryasia.com.tw/Movie';
 const TICKET_BASE = 'https://ticket.centuryasia.com.tw';
@@ -51,6 +53,7 @@ async function fetchViaMovieNowApi(siteCode, cinema) {
           cinema,
           area: AREA[siteCode] || '',
           movie: normTitle(mv.item_name),
+          sourceMovieId: String(mv.item_value),
           date: s.ShowDate || dt.item_value,
           time,
           hall: s.hall || null,
@@ -78,6 +81,13 @@ async function fetchViaTicketSite(siteCode, cinema) {
 
   const ashxUrl = `${TICKET_BASE}/${folder}/ImportOldMovieWeb/ajax/Program_ShowMovieTime.ashx`;
   for (const mv of movies) {
+    let sourceRuntimeMin = null;
+    if (identifyMovie({ movie: mv.title }).uncertain) {
+      try {
+        const html = await politeFetch(`${TICKET_BASE}/${folder}/movie_timetable.aspx?ProgramID=${mv.id}&TimeDetail=True`);
+        sourceRuntimeMin = parseCenturyMovieEvidence(html, { id: mv.id, movie: mv.title });
+      } catch (e) { console.log(`  ${cinema} ${mv.title}：版本仍待確認，${e.message}`); }
+    }
     for (let d = 0; d < TICKET_DAYS; d++) {
       const date = todayISO(d);
       let rooms;
@@ -101,6 +111,8 @@ async function fetchViaTicketSite(siteCode, cinema) {
             cinema,
             area: AREA[siteCode] || '',
             movie: normTitle(mv.title),
+            sourceMovieId: `${folder}:${mv.id}`,
+            sourceRuntimeMin,
             date,
             time: s.ShowTime,
             hall: room.RoomName || null,

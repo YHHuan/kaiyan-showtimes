@@ -1,5 +1,6 @@
 // 王牌映画影城：官方「全部場次」是 server-rendered HTML，一頁含所有電影與未來日期。
-import { politeFetch, saveRecords, normTitle } from '../lib/common.mjs';
+import { pathToFileURL } from 'node:url';
+import { politeFetch, saveRecords, normTitle, versionSignature } from '../lib/common.mjs';
 
 const BASE = 'https://www.acecinema.com.tw';
 const LIST_URL = `${BASE}/movie/all`;
@@ -22,7 +23,7 @@ function cleanTitle(raw) {
   // 否則同一部片在跨影城搜尋時會被拆成不同電影。
   for (let i = 0; i < 4; i++) {
     const lead = movie.match(/^\(([^)]{1,24})\)\s*/);
-    if (!lead) break;
+    if (!lead || versionSignature(lead[1])) break;
     tags.push(lead[1].trim());
     movie = movie.slice(lead[0].length).trim();
   }
@@ -40,6 +41,8 @@ export function parseAceShowtimes(html) {
     const { movie, tags } = cleanTitle(rawTitle);
     const movieEn = stripHtml(block.match(/<h4[^>]*>([\s\S]*?)<\/h4>/i)?.[1]) || null;
     const info = stripHtml(block.match(/<p\s+class=["']txt_gray["']>([\s\S]*?)<\/p>/i)?.[1]);
+    const duration = info.match(/(?:(\d+)\s*時\s*)?(\d+)\s*分/);
+    const sourceRuntimeMin = duration ? Number(duration[1] || 0) * 60 + Number(duration[2]) : null;
     const rating = ratingName(info.split('｜')[1] || '') || null;
     const table = block.match(/<table\b[^>]*>([\s\S]*?)<\/table>/i)?.[1] || '';
     const url = `${BASE}/booking/res?id=${id}`;
@@ -55,6 +58,9 @@ export function parseAceShowtimes(html) {
           cinema: '王牌映画影城',
           area: '台中市',
           movie,
+          rawMovie: rawTitle,
+          sourceMovieId: id,
+          sourceRuntimeMin,
           movieEn,
           rating,
           date,
@@ -70,5 +76,9 @@ export function parseAceShowtimes(html) {
 }
 
 // 王牌官網從 GitHub runner 偶爾首回應較慢，給它較寬裕的逾時並保留共用重試。
-const html = await politeFetch(LIST_URL, { timeoutMs: 60000 });
-await saveRecords(new URL('../data/acecinema.json', import.meta.url).pathname, parseAceShowtimes(html));
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const html = await politeFetch(LIST_URL, { timeoutMs: 60000 });
+  const records = parseAceShowtimes(html);
+  if (!records.length) throw new Error('王牌官網未解析到場次，保留上一輪資料');
+  await saveRecords(new URL('../data/acecinema.json', import.meta.url).pathname, records);
+}
