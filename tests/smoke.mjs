@@ -106,8 +106,8 @@ try {
   await ensureVisibleMovieCards();
 
   // 同一家戲院可能每部片都有不同活動頁（TFAI／OPENTIX 就是如此），不能把整家戲院
-  // 壓成一個網址。從本輪資料動態找一館兩個不同連結，確認單片頁仍指向該片自己的頁面。
-  const linkCase = await page.evaluate(() => {
+  // 壓成一個網址。動態抽查多館的兩個入口；同片多活動也必須逐一可達。
+  const linkCases = await page.evaluate(() => {
     const byCinema = {};
     for (const group of DATA.packed.split(';')) {
       const f = group.split(',');
@@ -117,26 +117,30 @@ try {
       if (!byCinema[ci]) byCinema[ci] = [];
       if (!byCinema[ci].some((x) => x.template === template)) byCinema[ci].push({ mi, di, template });
     }
+    const cases = [];
     for (const [ciText, samples] of Object.entries(byCinema)) {
       if (samples.length < 2) continue;
-      const ci = Number(ciText), sample = samples[1], date = DATA.dates[sample.di];
-      return {
-        cinema: DATA.cinemas[ci][0],
-        movie: DATA.movies[sample.mi][0],
-        expected: sample.template
-          .replace('{d}', date)
-          .replace('{s}', encodeURIComponent(date.replace(/-/g, '/'))),
-      };
+      const ci = Number(ciText);
+      for (const sample of samples.slice(0, 2)) {
+        const date = DATA.dates[sample.di];
+        cases.push({
+          cinema: DATA.cinemas[ci][0], movie: DATA.movies[sample.mi][0], date,
+          expected: sample.template.replace('{d}', date).replace('{s}', encodeURIComponent(date.replace(/-/g, '/'))),
+        });
+      }
+      if (cases.length >= 12) break;
     }
-    return null;
+    return cases;
   });
-  if (!linkCase) throw new Error('找不到可測試的同館不同活動連結');
-  const movieUrl = new URL(base);
-  movieUrl.searchParams.set('m', linkCase.movie);
-  await page.goto(movieUrl.href, { waitUntil: 'domcontentloaded' });
-  const movieLinks = await page.locator('.vlink').filter({ hasText: linkCase.cinema }).evaluateAll((els) => els.map((el) => el.href));
-  if (!movieLinks.includes(linkCase.expected)) {
-    throw new Error(`單片活動連結配錯：${linkCase.cinema}／${linkCase.movie} → ${movieLinks.join('、')}`);
+  if (!linkCases.length) throw new Error('找不到可測試的同館不同活動連結');
+  for (const linkCase of linkCases) {
+    const movieUrl = new URL(base);
+    movieUrl.search = new URLSearchParams({ m: linkCase.movie, dd: linkCase.date, n: '1' }).toString();
+    await page.goto(movieUrl.href, { waitUntil: 'domcontentloaded' });
+    const movieLinks = await page.locator('.vlink').filter({ hasText: linkCase.cinema }).evaluateAll((els) => els.map((el) => el.href));
+    if (!movieLinks.includes(linkCase.expected)) {
+      throw new Error(`單片活動連結配錯：${linkCase.cinema}／${linkCase.movie}／${linkCase.date}；預期 ${linkCase.expected}，實際 ${movieLinks.join('、')}`);
+    }
   }
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await ensureVisibleMovieCards();

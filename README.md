@@ -79,6 +79,17 @@ GitHub Actions **每天台北時間 05:17 與 17:17** 各排程重抓一次，�
 瀏覽器測試；若電影基本資料快取尚未符合新版比對規則，會先自動重新取得。
 預設不勾選；每日兩次排程仍會照常抓取所有來源。
 
+### 修正與測試
+
+- `npm run check`：語法檢查。
+- `npm test`：固定資料的版本、來源、收藏、活動連結、海報與手機／桌機回歸測試（需 Playwright Chromium 與 ffmpeg）。
+- `npm run build && npm run smoke`：另外驗證本輪真實場次產物；發佈仍須通過資料健康檢查。
+- PR 的「驗證修正」流程會先跑固定資料測試，能取得最近場次快取時再跑真實資料測試；不寫回快取，也不部署。
+
+同片同館的不同活動入口會分列，不會任選第一個連結；收藏若對應多個入口會提醒使用者確認。
+「加碼」等版本標記、同館不同電影 ID 或片長衝突，不可只憑短片名猜測合併。
+海報暫存僅使用 `.cache/posters/`，不清除 `.cache/local-skcinemas/` 的排程狀態與鎖檔。
+
 部署、網域成本、自動更新、安全模型與事故處理詳見
 [`docs/deployment-and-security.md`](docs/deployment-and-security.md)。目前是公開 repository + GitHub Pages，
 使用標準 runner 的主機與排程成本可維持 NT$0；自訂網域是日後的品牌選項，不是上線必要條件。

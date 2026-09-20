@@ -1,0 +1,56 @@
+name: 驗證修正
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  TZ: Asia/Taipei
+
+concurrency:
+  group: validate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: 安裝測試環境
+        run: |
+          set -e
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y ffmpeg
+          fi
+      - name: 語法與固定資料回歸測試
+        run: |
+          npm run check
+          npm test
+      # 只讀取正式抓取快取，不寫回、不抓整站、不持有 Pages 發佈權限。
+      - name: 讀取最近場次供整合測試
+        id: data
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            data
+            assets
+          key: validation-${{ github.run_id }}
+          restore-keys: |
+            showtimes-data-
+      - name: 實際場次建站與瀏覽器測試
+        if: steps.data.outputs.cache-matched-key != ''
+        run: |
+          node build_site.mjs
+          node tests/smoke.mjs
