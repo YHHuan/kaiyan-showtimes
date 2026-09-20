@@ -726,7 +726,11 @@ var DATA = __DATA__;
   }
   function sessionKey(s) { return JSON.stringify([canonicalSavedName("movies", s.movie), canonicalSavedName("cinemas", s.cinema), s.date, s.mins, s.hall, s.tag]); }
   var sessionRows = new Map();
-  ROWS.forEach(function (r) { sessionRows.set(sessionKey(sessionSnapshot(r)), r); });
+  ROWS.forEach(function (r) {
+    var key = sessionKey(sessionSnapshot(r));
+    if (!sessionRows.has(key)) sessionRows.set(key, []);
+    sessionRows.get(key).push(r);
+  });
   function sessionStart(s) { return Date.parse(s.date + "T00:00:00+08:00") + s.mins * 60000; }
 
   function readFavorites() {
@@ -993,7 +997,9 @@ var DATA = __DATA__;
         var aPast = sessionStart(a) <= Date.now(), bPast = sessionStart(b) <= Date.now();
         return Number(aPast) - Number(bPast) || (aPast ? sessionStart(b) - sessionStart(a) : sessionStart(a) - sessionStart(b));
       }).forEach(function (s) {
-        var current = sessionRows.get(sessionKey(s));
+        var matches = sessionRows.get(sessionKey(s)) || [];
+        var current = matches[0];
+        var bookingUrls = Array.from(new Set(matches.map(bookUrl).filter(Boolean)));
         var past = sessionStart(s) <= Date.now();
         var row = el("div", "planrow saved-session");
         var time = el("div", "plantime", s.date.slice(5).replace("-", "/"));
@@ -1007,6 +1013,7 @@ var DATA = __DATA__;
         main.appendChild(el("div", "plandetail", [s.hall, s.tag].filter(Boolean).join(" · ") || "一般場"));
         main.appendChild(el("div", "saved-status" + (!past && !current ? " attention" : ""), past
           ? "已開演／已過期，保留你的收藏紀錄"
+          : bookingUrls.length > 1 ? "本輪有多個活動入口，請確認版本與票種後購票"
           : current ? "本輪資料有此場次，購票前請向戲院確認"
           : "本輪未查到此場次，可能尚未公布或已異動，請向戲院確認"));
         row.appendChild(main);
@@ -1014,12 +1021,11 @@ var DATA = __DATA__;
         actions.appendChild(sessionFavoriteButton(s));
         if (current && !past) {
           actions.appendChild(calendarButton(current));
-          var url = bookUrl(current);
-          if (url) {
-            var book = el("a", "bookbtn", "影城訂票 →");
+          bookingUrls.forEach(function (url, index) {
+            var book = el("a", "bookbtn", bookingUrls.length > 1 ? "活動入口 " + (index + 1) + " →" : "影城訂票 →");
             book.href = url; book.target = "_blank"; book.rel = "noopener noreferrer";
             actions.appendChild(book);
-          }
+          });
         }
         row.appendChild(actions);
         sessions.appendChild(row);
@@ -1480,6 +1486,20 @@ var DATA = __DATA__;
   }
 
   function venueRow(label, area, rows, movieIdx) {
+    // 同片同館可能有不同活動／票種入口。按真正的 URL 分列，讓時間跟入口一起走。
+    var byBooking = new Map();
+    rows.forEach(function (r) {
+      var url = bookUrl(r);
+      if (!byBooking.has(url)) byBooking.set(url, []);
+      byBooking.get(url).push(r);
+    });
+    if (byBooking.size > 1) {
+      var fragment = document.createDocumentFragment();
+      Array.from(byBooking.values()).forEach(function (group, index) {
+        fragment.appendChild(venueRow(label + " · 入口 " + (index + 1), area, group, movieIdx));
+      });
+      return fragment;
+    }
     var v = el("div", "venue");
     var n = el("div", "vname");
     if (area) n.appendChild(el("span", "area", area));

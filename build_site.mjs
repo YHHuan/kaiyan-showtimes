@@ -89,7 +89,8 @@ const seen = new Set();
 const merged = normalized.filter((r) => {
   if (!r.date || !r.time || !r.movie) return false;
   if (r.date < todayTPE) return false;
-  const k = `${r.cinema}|${r.movie}|${r.date}|${r.time}|${r.hall || ''}|${(r.tags || []).join()}`;
+  // 同館同片同時仍可能是不同活動／票種；只有購票入口也相同才可去重。
+  const k = JSON.stringify([r.cinema, r.movie, r.date, r.time, r.hall || '', r.tags || [], safeHttpUrl(r.url)]);
   if (seen.has(k)) return false;
   seen.add(k);
   return true;
@@ -121,7 +122,8 @@ const SPRITE_QUALITY = '15';
 
 async function buildSprite(relPaths) {
   if (!relPaths.length) return null;
-  const cache = `${root}.cache`;
+  // .cache/local-skcinemas 還存著排程狀態與鎖；海報只能清自己的暫存目錄。
+  const cache = `${root}.cache/posters`;
   await rm(cache, { recursive: true, force: true });
   await mkdir(cache, { recursive: true });
   let n = 0;
@@ -221,7 +223,8 @@ const variants = new Map();
 for (const r of merged) {
   const k = matchKey(r.movie);
   let v = variants.get(k);
-  if (!v) { v = { titles: new Map(), en: null, rating: null }; variants.set(k, v); }
+  if (!v) { v = { titles: new Map(), en: null, rating: null, records: [] }; variants.set(k, v); }
+  v.records.push(r);
   v.titles.set(r.movie, (v.titles.get(r.movie) || 0) + 1);
   if (!v.en && r.movieEn) v.en = r.movieEn;
   if (!v.rating && r.rating) v.rating = r.rating;
@@ -230,6 +233,29 @@ for (const r of merged) {
 // 來源截斷的片名：「電影蠟筆小新：奇奇怪怪！我的妖怪」其實是「…我的妖怪假期」被切掉尾巴。
 // 只在「夠長的前綴 + 只差幾個字」時才併，避免把系列作（例：續集）誤併。
 const keysByLen = [...variants.keys()].sort((a, b) => a.length - b.length);
+function compatibleTitleEvidence(a, b) {
+  const rows = [...a.records, ...b.records];
+  const identities = new Set(rows.map(r => r.movieIdentity).filter(Boolean));
+  if (identities.size > 1) return false;
+  const runtimes = rows.map(r => r.sourceRuntimeMin).filter(n => Number.isFinite(n) && n > 0);
+  if (runtimes.length && Math.max(...runtimes) - Math.min(...runtimes) > 5) return false;
+  // 同一來源／同館明明有不同電影 ID，就不能把它猜成「片名被截短」。
+  const ids = variant => {
+    const scopes = new Map();
+    for (const r of variant.records) {
+      if (!r.source || !r.sourceMovieId) continue;
+      const scope = JSON.stringify([r.source, r.cinema]);
+      if (!scopes.has(scope)) scopes.set(scope, new Set());
+      scopes.get(scope).add(String(r.sourceMovieId));
+    }
+    return scopes;
+  };
+  const left = ids(a), right = ids(b);
+  for (const [scope, values] of left) {
+    if (right.has(scope) && new Set([...values, ...right.get(scope)]).size > 1) return false;
+  }
+  return true;
+}
 let truncFolded = 0;
 for (const short of keysByLen) {
   if (!variants.has(short) || short.length < 8) continue;
@@ -237,10 +263,12 @@ for (const short of keysByLen) {
   if (!full) continue;
   const from = variants.get(short);
   const to = variants.get(full);
+  if (!compatibleTitleEvidence(from, to)) continue;
   // 截斷版的片名登記進來（讓場次對得上），但票數給 0——顯示名要用完整的那個
   for (const t of from.titles.keys()) if (!to.titles.has(t)) to.titles.set(t, 0);
   to.en = to.en || from.en;
   to.rating = to.rating || from.rating;
+  to.records.push(...from.records);
   variants.delete(short);
   truncFolded++;
 }
@@ -352,7 +380,7 @@ if (untrustedMeta) console.log(`  略過 ${untrustedMeta} 筆未核對電影版�
 const runtimeEvidence = new Map();
 for (const r of merged) {
   if (!(Number.isFinite(r.sourceRuntimeMin) && r.sourceRuntimeMin > 0)) continue;
-  const key = matchKey(r.movie);
+  const key = matchKey(movieInfo.get(r.movie)?.title || r.movie);
   if (!runtimeEvidence.has(key)) runtimeEvidence.set(key, new Set());
   runtimeEvidence.get(key).add(r.sourceRuntimeMin);
 }

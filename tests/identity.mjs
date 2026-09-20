@@ -25,6 +25,9 @@ test('特別場歸戶及截斷補全不能跨版本或任意選一個續集', ()
   assert.equal(foldTitle(`IMAX ${base}`, hasBase)?.base, base);
   assert.equal(truncatedTitleKey(matchKey(base), [matchKey(`${base}加長版`)]), null);
   assert.equal(truncatedTitleKey(matchKey(base), [matchKey(`${base}2`)]), null);
+  const endgame = '復仇者聯盟：終局之戰';
+  assert.equal(truncatedTitleKey(matchKey(endgame), [matchKey(endgame + ' 加碼重映')]), null,
+    '加碼重映不能被當成漏掉兩個字的片名');
   const short = matchKey('電影蠟筆小新：奇奇怪怪！我的妖怪');
   const full = matchKey('電影蠟筆小新：奇奇怪怪！我的妖怪假期');
   assert.equal(truncatedTitleKey(short, [short, full]), full);
