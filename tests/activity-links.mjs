@@ -85,6 +85,7 @@ try {
   await page.goto(base + '?saved=1');
   assert.equal(await page.locator('.saved-session').count(), 1, '保留既有收藏格式與場次辨識');
   assert.match(await page.locator('.saved-session').innerText(), /多個活動入口/);
+  assert.equal(await page.locator('.saved-session .calbtn').count(), 0, '歧義收藏不能把任選的活動網址寫入行事曆');
   assert.deepEqual((await page.locator('.saved-session .bookbtn').evaluateAll(els => els.map(el => el.href))).sort(),
     [url('event-a'), url('event-b')], '歧義收藏必須提供所有本輪入口，不能任選最後一筆');
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('kaiyan.sessions')));

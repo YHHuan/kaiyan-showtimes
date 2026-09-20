@@ -1020,7 +1020,8 @@ var DATA = __DATA__;
         var actions = el("div", "planactions");
         actions.appendChild(sessionFavoriteButton(s));
         if (current && !past) {
-          actions.appendChild(calendarButton(current));
+          // 舊收藏沒有活動識別：有歧義時連行事曆也不能偷選其中一個購票網址。
+          if (bookingUrls.length <= 1) actions.appendChild(calendarButton(current));
           bookingUrls.forEach(function (url, index) {
             var book = el("a", "bookbtn", bookingUrls.length > 1 ? "活動入口 " + (index + 1) + " →" : "影城訂票 →");
             book.href = url; book.target = "_blank"; book.rel = "noopener noreferrer";
