@@ -51,7 +51,7 @@ test('實際建站仍分開原版與剪輯版，且只帶入經核對的各自�
     await mkdir(join(scratch, 'data'));
     await mkdir(join(scratch, 'lib'));
     await mkdir(join(scratch, 'fetch'));
-    for (const file of ['build_site.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs', 'lib/cinema-coverage.mjs', 'fetch/movie_meta.mjs']) {
+    for (const file of ['build_site.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs', 'lib/cinema-coverage.mjs', 'lib/schedule-parsers.mjs', 'fetch/movie_meta.mjs']) {
       await copyFile(new URL('../' + file, import.meta.url), join(scratch, file));
     }
     const titles = [base, base + ' 加長版', base + ' 導演剪輯版', '舊快取測試片', '來源誤配測試片 加長版'];
@@ -90,7 +90,7 @@ test('實際建站以來源 ID 拆開驀然回首，天母真人場不能共用�
   try {
     await mkdir(join(scratch, 'data'));
     await mkdir(join(scratch, 'lib'));
-    for (const file of ['build_site.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs', 'lib/cinema-coverage.mjs']) {
+    for (const file of ['build_site.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs', 'lib/cinema-coverage.mjs', 'lib/schedule-parsers.mjs']) {
       await copyFile(new URL('../' + file, import.meta.url), join(scratch, file));
     }
     const baseRow = { source: 'atmovies', area: '台北市', date: '2099-01-01', time: '10:55', tags: [], url: 'https://example.org/book' };

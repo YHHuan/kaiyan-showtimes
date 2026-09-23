@@ -346,10 +346,10 @@
   .t.ev { color: var(--blue); }
   .t.past { opacity: .35; font-weight: 500; }
   /* 版本提到群組層級：同一版本的場次排一列，標籤只出現一次 */
-  .vergroup { display: flex; gap: 12px; align-items: baseline; width: 100%; }
+  .vergroup { display: grid; grid-template-columns: minmax(0, 8rem) minmax(0, 1fr); gap: 4px 12px; align-items: baseline; width: 100%; min-width: 0; }
   .verlabel {
-    flex: 0 0 auto;
-    min-width: 8em;
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-size: 11px;
     color: var(--ink3);
     letter-spacing: .02em;
@@ -512,7 +512,8 @@
     .favbtn, .calbtn, .t { min-height: 44px; }
     .t { min-width: 64px; }
     .vname { flex-basis: 100%; }
-    .verlabel { min-width: 6em; }
+    /* 手機讓版本在時間上方；長標籤完整換行，不把時間擠出畫面或截掉內容。 */
+    .vergroup { grid-template-columns: minmax(0, 1fr); gap: 2px; }
     .poster { flex-basis: 52px; width: 52px; height: 78px; }
     .planrow { grid-template-columns: 82px minmax(0, 1fr); gap: 9px; }
     .planactions { grid-column: 2; }
@@ -724,7 +725,11 @@ var DATA = __DATA__;
   function sessionSnapshot(r) {
     return { movie: M[r[1]][0], cinema: C[r[0]][0], date: D[r[2]], mins: r[5], hall: H[r[3]] || "", tag: T[r[4]] || "" };
   }
-  function sessionKey(s) { return JSON.stringify([canonicalSavedName("movies", s.movie), canonicalSavedName("cinemas", s.cinema), s.date, s.mins, s.hall, s.tag]); }
+  // 曾存下開眼頁尾誤抓標籤的收藏，清理資料後仍指向同一場；不猜其他版本別名。
+  function canonicalSavedTag(tag) {
+    return tag.replace(/(?:^|・)\s*(?:&copy;|&#169;|&#x0*a9;|©)?\s*@movies\s+All rights reserved\s+開眼電影網版權所有\s*$/i, '').trim();
+  }
+  function sessionKey(s) { return JSON.stringify([canonicalSavedName("movies", s.movie), canonicalSavedName("cinemas", s.cinema), s.date, s.mins, s.hall, canonicalSavedTag(s.tag)]); }
   var sessionRows = new Map();
   ROWS.forEach(function (r) {
     var key = sessionKey(sessionSnapshot(r));
@@ -747,7 +752,7 @@ var DATA = __DATA__;
         if (!s || ![s.movie, s.cinema, s.date, s.hall, s.tag].every(function (x) { return typeof x === "string" && x.length <= 1000; })) return;
         if (!s.movie || !s.cinema || !/^\d{4}-\d{2}-\d{2}$/.test(s.date) || !Number.isFinite(sessionStart(s))) return;
         if (!Number.isInteger(s.mins) || s.mins < 0 || s.mins >= 2880) return;
-        sessions.set(sessionKey(s), { movie: s.movie, cinema: s.cinema, date: s.date, mins: s.mins, hall: s.hall, tag: s.tag });
+        sessions.set(sessionKey(s), { movie: s.movie, cinema: s.cinema, date: s.date, mins: s.mins, hall: s.hall, tag: canonicalSavedTag(s.tag) });
       });
       if (separateSessions === null && sessions.size) store.set("sessions", JSON.stringify(Array.from(sessions.values())));
       return { movies: names(v.movies), cinemas: names(v.cinemas), sessions: Array.from(sessions.values()) };

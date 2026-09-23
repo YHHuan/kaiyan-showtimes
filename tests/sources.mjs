@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseAtmovies, parseSkcinemas, parseCenturyMovieEvidence } from '../lib/schedule-parsers.mjs';
+import { parseAtmovies, parseSkcinemas, parseCenturyMovieEvidence, cleanAtmoviesTags } from '../lib/schedule-parsers.mjs';
 import { identifyMovie, canonicalMetadata, normalizeMovieRecords } from '../lib/movie-identity.mjs';
 import { parseAceShowtimes } from '../fetch/acecinema.mjs';
 import { parseMiranew } from '../fetch/miranew.mjs';
@@ -42,6 +42,48 @@ test('日期必須從頁面核對，僅循同館、合法、範圍內的已公�
   assert.throws(() => parseAtmovies('<h1>請稍後再試</h1>', options), /日期不符/);
   assert.throws(() => parseAtmovies(header, options), /解析不完整/);
   assert.equal(parseAtmovies(header + '<p>尚未公布場次</p>', options).records.length, 0);
+});
+
+test('開眼場次依巢狀 ul 邊界結束，不依賴註解，也不吃頁尾與相鄰清單', () => {
+  const first = movieBlock('甲電影', 'ftesta', 100, 'TITAN廳', '12：00').replace('<!-- theaterShowtimeBlock -->', '');
+  const last = movieBlock('乙電影', 'ftestb', 120, '杜比ATMOS廳', '15：00').replace('<!-- theaterShowtimeBlock -->', '');
+  const outside = '<ul class="navigation"><li>聯絡我們</li><li>23：59</li></ul>';
+  const footer = '<footer><ul><li>&copy; @movies All rights reserved 開眼電影網版權所有</li><li>22:22</li></ul></footer>';
+  const { records } = parseAtmovies(header + first + outside + last + footer, options);
+  assert.deepEqual(records.map(r => [r.movie, r.time, r.tags, r.sourceRuntimeMin]), [
+    ['甲電影', '12:00', ['TITAN廳'], 100], ['乙電影', '15:00', ['杜比ATMOS廳'], 120],
+  ]);
+});
+
+test('開眼清單容許屬性順序、大小寫與註解差異，但不能讀取註解／script 內的假場次', () => {
+  const valid = movieBlock('測試片', 'ftest', 100, '國語發音', '12：00')
+    .replace('<ul id="theaterShowtimeTable">', "<UL class='showtimes' ID = 'theaterShowtimeTable' data-day='13'>")
+    .replace('<li>12：00</li>', '<li>12：00</li><!-- <ul><li>22：22</li></ul> -->');
+  const hidden = movieBlock('非場次', 'ffake', 1, '假標籤', '23：00');
+  const html = header + '<!-- ' + hidden.replace('<!-- theaterShowtimeBlock -->', '') + ' -->'
+    + '<script>const sample = ' + JSON.stringify(hidden) + ';</script>' + valid;
+  const { records } = parseAtmovies(html, options);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].sourceMovieId, 'ftest');
+  assert.deepEqual(records[0].tags, ['國語發音']);
+});
+
+test('開眼清單未關閉時拒收，不把下一片或頁尾補成合法場次', () => {
+  const broken = movieBlock('測試片', 'ftest', 100, '國語發音', '12：00').replace(/<\/ul><!-- theaterShowtimeBlock -->$/, '');
+  assert.throws(() => parseAtmovies(header + broken, options), /解析不完整/);
+  assert.throws(() => parseAtmovies(header + broken + movieBlock('其他片', 'fother', 100, '', '15：00'), options), /解析不完整/);
+});
+
+test('開眼舊標籤只移除已核實的頁尾文字，不截斷、不改寫合法版本', () => {
+  for (const symbol of ['&copy;', '&#169;', '&#xA9;', '©']) {
+    const footer = symbol + ' @movies All rights reserved 開眼電影網版權所有';
+    const input = ['TITAN廳', footer, 'Gold Class・' + footer, 'TITAN廳', '合法特殊場'.repeat(30)];
+    const before = [...input];
+    assert.deepEqual(cleanAtmoviesTags(input), ['TITAN廳', 'Gold Class', '合法特殊場'.repeat(30)]);
+    assert.deepEqual(input, before, '不得改寫呼叫端原始快取');
+  }
+  assert.deepEqual(cleanAtmoviesTags(['Copyright 訪談場', '原音・中文字幕', '4DX版']), ['Copyright 訪談場', '原音・中文字幕', '4DX版']);
+  assert.deepEqual(cleanAtmoviesTags(null), []);
 });
 
 test('同一來源 ID 的異名歸戶，未知同名版本不猜，版本矛盾不信任', () => {
