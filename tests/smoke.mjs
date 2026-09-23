@@ -72,6 +72,57 @@ async function checkPosterCrops() {
   if (failures.length) throw new Error(failures.join(' | '));
 }
 
+async function checkVersionLayouts() {
+  const cases = await page.evaluate(() => {
+    if (DATA.tags.some(t => /@movies\s+All rights reserved/i.test(t || ''))) throw new Error('格式標籤混入開眼頁尾版權文字');
+    const groups = new Map();
+    for (const group of DATA.packed.split(';')) {
+      const f = group.split(','), [ci, mi, di, hi, ti, ui] = f.slice(0, 6).map(n => parseInt(n, 36));
+      const key = [ci, mi, di, ui].join(',');
+      if (!groups.has(key)) groups.set(key, { ci, mi, di, labels: new Set(), score: 0 });
+      const sample = groups.get(key), label = DATA.tags[ti] || DATA.halls[hi] || '';
+      sample.labels.add(label);
+      sample.score = Math.max(sample.score, label.length);
+    }
+    const candidates = [...groups.values()].filter(g => g.labels.size > 1).sort((a, b) => b.score - a.score);
+    // 最長標籤優先，另補不同日期，避免只測今天而漏掉明天才顯示的內容。
+    const chosen = candidates.slice(0, 4);
+    for (const di of new Set(candidates.map(g => g.di))) {
+      if (!chosen.some(g => g.di === di)) chosen.push(candidates.find(g => g.di === di));
+      if (chosen.length >= 6) break;
+    }
+    return chosen.map(g => ({ movie: DATA.movies[g.mi][0], cinema: DATA.cinemas[g.ci][0], date: DATA.dates[g.di] }));
+  });
+  if (!cases.length) throw new Error('正式資料找不到多版本標籤可供排版測試');
+  const context = await browser.newContext();
+  try {
+    const layoutPage = await context.newPage();
+    layoutPage.on('pageerror', err => errors.push(err.message));
+    await layoutPage.clock.setFixedTime(new Date(fixtureDay + 'T00:00:00+08:00'));
+    for (const width of [320, 390, 1280]) {
+      await layoutPage.setViewportSize({ width, height: 844 });
+      for (const sample of cases) {
+        for (const params of [{ v: 'cinema', q: sample.cinema, d: sample.date, n: '1' }, { m: sample.movie, dd: sample.date, n: '1' }]) {
+          await layoutPage.goto(base + '?' + new URLSearchParams(params), { waitUntil: 'domcontentloaded' });
+          if (!await layoutPage.locator('.verlabel').count()) throw new Error('未顯示預期的版本標籤：' + JSON.stringify(params));
+          const result = await layoutPage.evaluate(() => ({
+            width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+            overflow: [...document.querySelectorAll('.verlabel, .vergroup > .times, .vergroup .t')].flatMap(el => {
+              const r = el.getBoundingClientRect();
+              return r.left < 0 || r.right > innerWidth + 1 || el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
+                ? [{ class: el.className, text: el.textContent.slice(0, 100), left: r.left, right: r.right }] : [];
+            }).slice(0, 4),
+          }));
+          if (result.scrollWidth > width + 1 || result.overflow.length) {
+            throw new Error('版本排版溢出：' + JSON.stringify({ params, ...result }));
+          }
+        }
+      }
+    }
+  } finally { await context.close(); }
+  console.log(`production labels OK: ${cases.length} 組多版本真實場次，跨日期／戲院與內頁／320、390、1280px`);
+}
+
 try {
   const response = await page.goto(base, { waitUntil: 'domcontentloaded' });
   if (!response?.ok()) throw new Error(`首頁 HTTP ${response?.status()}`);
@@ -240,6 +291,7 @@ try {
   if (!moviePath) throw new Error('sitemap 找不到電影索引網址');
   const seoResponse = await page.request.get(new URL(moviePath.replace(/^\//, ''), base).href);
   if (!seoResponse.ok() || !(await seoResponse.text()).includes('電影時刻')) throw new Error('電影索引頁無法讀取');
+  await checkVersionLayouts();
   if (errors.length) throw new Error(`瀏覽器錯誤：${errors.join(' | ')}`);
   console.log(`smoke OK: ${status.counts.sessions} 場、${status.counts.cinemas} 影城、${status.counts.movies} 部片`);
 } finally {

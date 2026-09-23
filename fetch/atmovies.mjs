@@ -22,7 +22,7 @@
 // 遺留的亂碼（U+FFFD），跟場次資料無關，不影響解析。
 import { readFile } from 'node:fs/promises';
 import { politeFetch, saveRecords, todayISO } from '../lib/common.mjs';
-import { parseAtmovies } from '../lib/schedule-parsers.mjs';
+import { parseAtmovies, cleanAtmoviesTags } from '../lib/schedule-parsers.mjs';
 import { SK_CINEMAS } from '../lib/cinema-coverage.mjs';
 
 const BASE = 'https://www.atmovies.com.tw';
@@ -136,7 +136,7 @@ try { previous = JSON.parse(await readFile(path, 'utf8')); } catch {}
 try { status = JSON.parse(await readFile(new URL('../data/_status.json', import.meta.url), 'utf8')); } catch {}
 const today = todayISO(), records = [], cinemas = {};
 const retain = (name, date) => previous.filter(r => r.cinema === name && r.date >= today && (!date || r.date === date))
-  .map(r => ({ ...r, fetchedAt: r.fetchedAt || status.atmovies?.fetchedAt || '1970-01-01T00:00:00Z' }));
+  .map(r => ({ ...r, tags: cleanAtmoviesTags(r.tags), fetchedAt: r.fetchedAt || status.atmovies?.fetchedAt || '1970-01-01T00:00:00Z' }));
 for (const [code, config] of Object.entries(CINEMAS)) {
   const rootUrl = BASE + '/showtime/' + code + '/' + config.region + '/';
   const configWithCode = { ...config, code, expectedDate: today };
@@ -174,4 +174,4 @@ for (const [code, config] of Object.entries(CINEMAS)) {
   console.log('  ' + config.name + ': ' + fresh.length + ' 筆 / ' + new Set(fresh.map(r => r.date)).size + ' 天'
     + (failedDates.length ? '；' + failedDates.length + ' 天取得失敗' : ''));
 }
-await saveRecords(path, records, { cinemas, parserVersion: 2 });
+await saveRecords(path, records, { cinemas, parserVersion: 3 });

@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { matchKey, foldTitle, truncatedTitleKey, trustedMovieMeta } from './lib/common.mjs';
 import { normalizeMovieRecords, canonicalMetadata, MOVIE_ALIASES } from './lib/movie-identity.mjs';
 import { cinemaCoverage, selectScheduleRows, cinemaName, CINEMA_ALIASES } from './lib/cinema-coverage.mjs';
+import { cleanAtmoviesTags } from './lib/schedule-parsers.mjs';
 
 const root = new URL('.', import.meta.url).pathname;
 const SITE_URL = (process.env.SITE_URL || 'https://yhhuan.github.io/kaiyan-showtimes').replace(/\/$/, '');
@@ -63,7 +64,9 @@ for (const f of (await readdir(`${root}data`)).filter((f) => f.endsWith('.json')
   // data/ 底下不是每個 json 都是場次陣列（prices/cinemas/movie_meta 是查表用的物件），
   // 用型別判斷比維護排除清單穩固——之後新增查表檔也不會再炸掉建置。
   if (!Array.isArray(rows)) continue;
-  all.push(...rows);
+  // 快取重建／來源抓取失敗時也會讀到舊資料；在去重與版本分組前移除已知污染。
+  // 不覆寫原檔，也不更新 fetchedAt，避免把修資料當成一次成功抓取。
+  all.push(...rows.map(r => r.source === 'atmovies' ? { ...r, tags: cleanAtmoviesTags(r.tags) } : r));
   if (ageH != null) freshness[source] = ageH;
   console.log(`  ${f}: ${rows.length}${ageH != null && ageH > 26 ? `（${ageH.toFixed(0)}h 前，本輪未更新）` : ''}`);
 }

@@ -11,7 +11,7 @@ const scratch = await mkdtemp(join(tmpdir(), 'kaiyan-activity-links-'));
 let server, browser;
 try {
   for (const dir of ['data', 'lib', 'assets', '.cache/local-skcinemas']) await mkdir(join(scratch, dir), { recursive: true });
-  for (const file of ['build_site.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs', 'lib/cinema-coverage.mjs']) {
+  for (const file of ['build_site.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs', 'lib/cinema-coverage.mjs', 'lib/schedule-parsers.mjs']) {
     await copyFile(new URL('../' + file, import.meta.url), join(scratch, file));
   }
   await copyFile(new URL('../icon-192.png', import.meta.url), join(scratch, 'assets', 'fixture.png'));
