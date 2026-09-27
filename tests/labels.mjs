@@ -15,7 +15,7 @@ const dates = ['2099-01-01', '2099-01-02'];
 let server, browser;
 try {
   for (const dir of ['data', 'lib']) await mkdir(join(scratch, dir));
-  for (const file of ['build_site.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs', 'lib/cinema-coverage.mjs', 'lib/schedule-parsers.mjs']) {
+  for (const file of ['build_site.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs', 'lib/cinema-coverage.mjs', 'lib/schedule-parsers.mjs', 'lib/discovery.mjs']) {
     await copyFile(new URL('../' + file, import.meta.url), join(scratch, file));
   }
   const baseRow = { source: 'atmovies', movie, cinema, area: '台中市', sourceMovieId: 'flabel', hall: null,

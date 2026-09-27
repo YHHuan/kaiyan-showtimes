@@ -400,6 +400,14 @@
   .coverage-note { color: var(--ink2); font-size: 13px; margin: 8px 0 12px; line-height: 1.7; }
   .coverage-note summary { cursor: pointer; }
   .coverage-note ul { padding-left: 20px; max-height: 220px; overflow-y: auto; }
+  .discovery-note { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); background: var(--sheet); color: var(--ink2); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+  .discovery-note p { margin: 4px 0; }
+  .discovery-note summary { cursor: pointer; min-height: 44px; display: list-item; padding-top: 8px; }
+  .discovery-note ul { padding-left: 20px; max-height: 280px; overflow-y: auto; }
+  .discovery-note li { margin-bottom: 10px; }
+  .discovery-note a { display: inline-block; padding: 8px 4px; min-height: 44px; }
+  .discovery-note .clear { min-height: 44px; }
+  #brand, #series { max-width: 100%; min-width: 0; }
   .empty b { display: block; font-size: 17px; color: var(--ink); margin-bottom: 6px; font-family: "Noto Serif TC", serif; }
   .more {
     display: block;
@@ -560,6 +568,8 @@
       </select>
       <select id="lang" aria-label="配音語言"></select>
       <select id="format" aria-label="影廳格式"></select>
+      <select id="brand" aria-label="發行／品牌片單"></select>
+      <select id="series" aria-label="已核實策展系列"></select>
       <select id="slot" aria-label="時段">
         <option value="all">全時段</option>
         <option value="morning">早場 ‹12:00</option>
@@ -590,6 +600,7 @@
 
   <div class="summary" id="summary"></div>
   <div id="coverage-note" class="coverage-note" role="status" hidden></div>
+  <section id="discovery-note" class="discovery-note" aria-label="片單與系列核對範圍" hidden></section>
   <p class="session-hint" id="session-hint" hidden>點場次旁的 ☆ 可收藏這一場；購票請點戲院名稱。</p>
   <main id="list" tabindex="-1"></main>
   <div class="toast" id="save-status" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -702,10 +713,22 @@ var DATA = __DATA__;
     return out;
   })();
 
+  // 分類索引只屬於這次建站；網址／收藏不保存電影或場次的暫時索引。
+  var DISC = DATA.discovery;
+  if (!DISC || DISC.version !== 1 || DISC.status !== "ready" || !Array.isArray(DISC.brands) || !Array.isArray(DISC.series)) {
+    DISC = { status: "unavailable", brands: [], series: [] };
+  }
+  var BRAND_MAP = new Map(), SERIES_MAP = new Map(), VERIFIED_SERIES_ROWS = new Set();
+  DISC.brands.forEach(function (b) { BRAND_MAP.set(b.id, { info: b, matches: new Set(b.movies) }); });
+  DISC.series.forEach(function (s) {
+    var matches = new Set(s.rows.map(function (i) { VERIFIED_SERIES_ROWS.add(ROWS[i]); return ROWS[i]; }));
+    SERIES_MAP.set(s.id, { info: s, matches: matches });
+  });
+
   var TAG_LANG = T.map(langOf); // 標籤索引 → 語言，先算好避免每次篩選重跑正規表達式
 
   // 索引：0=戲院 1=電影 2=日期 3=廳 4=標籤 5=分鐘數 6=座位等級(0無資料/1空/2剩一些/3快滿) 7=連結
-  function isEvent(r) { var t = T[r[4]]; return !!t && EVENT_RE.test(t); }
+  function isEvent(r) { var t = T[r[4]]; return VERIFIED_SERIES_ROWS.has(r) || (!!t && EVENT_RE.test(t)); }
   function hhmm(m) { return p2(Math.floor(m / 60)) + ":" + p2(m % 60); }
   // 每組場次保留自己的連結；{d}=2026-08-21、{s}=2026%2F08%2F21（國賓那種帶查詢日期的）
   function bookUrl(r) {
@@ -843,6 +866,8 @@ var DATA = __DATA__;
     slot: "all",
     lang: "all",
     format: "all",
+    brand: "all",
+    series: "all",
     sort: "area",
     expanded: {},   // 哪幾部片的戲院清單已展開（「另有 N 家」那層）
     openCards: {},  // 哪幾部片的場次區塊是打開的（手機預設全收）
@@ -957,6 +982,7 @@ var DATA = __DATA__;
   function resetQuery() {
     NOW = taipeiNow();
     Object.assign(state, { date: defaultDate(), view: "movie", area: "全部", slot: "all", lang: "all", format: "all", sort: "area",
+      brand: "all", series: "all",
       expanded: {}, openCards: {}, onlyEvent: false, onlyFav: false, showPast: false, showEnd: false,
       movie: null, saved: false, dates: [], q: "", planStart: "18:00", planEnd: "23:59", maxPrice: "all", maxDist: "all", limit: 40 });
     myPos = null;
@@ -1234,6 +1260,8 @@ var DATA = __DATA__;
       if (!slotOk(r[5])) continue;
       if (state.lang !== "all" && TAG_LANG[r[4]] !== state.lang) continue;
       if (state.format !== "all" && formatOf(T[r[4]], H[r[3]]).indexOf(state.format) < 0) continue;
+      if (state.brand !== "all" && (!BRAND_MAP.has(state.brand) || !BRAND_MAP.get(state.brand).matches.has(r[1]))) continue;
+      if (state.series !== "all" && (!SERIES_MAP.has(state.series) || !SERIES_MAP.get(state.series).matches.has(r))) continue;
       if (state.onlyEvent && !isEvent(r)) continue;
       if (state.onlyFav) {
         var favMatch = state.view === "cinema"
@@ -1837,6 +1865,8 @@ var DATA = __DATA__;
     if (state.slot !== "all") p.set("s", state.slot);
     if (state.lang !== "all") p.set("g", state.lang);
     if (state.format !== "all") p.set("f", state.format);
+    if (state.brand !== "all") p.set("brand", state.brand);
+    if (state.series !== "all") p.set("series", state.series);
     if (state.sort !== "area") p.set("o", state.sort);
     if (state.q) p.set("q", state.q);
     if (state.onlyEvent) p.set("e", "1");
@@ -1879,6 +1909,11 @@ var DATA = __DATA__;
     if (s && ["all", "morning", "afternoon", "evening", "late"].indexOf(s) >= 0) state.slot = s;
     if (TAG_LANG.indexOf(p.get("g")) >= 0 && p.get("g")) state.lang = p.get("g");
     if (FORMAT_RULES.some(function (rule) { return rule[0] === p.get("f"); })) state.format = p.get("f");
+    ["brand", "series"].forEach(function (key) {
+      var value = p.get(key);
+      // 保留未知／已退役的有效 ID，顯示不可用，不可悄悄放寬成全部場次。
+      if (/^[a-z][a-z0-9-]{0,79}$/.test(value || "")) state[key] = value;
+    });
     if (["next","dist","price"].indexOf(p.get("o")) >= 0) state.sort = p.get("o");
     if (p.get("q")) state.q = p.get("q").trim().toLowerCase();
     state.onlyEvent = p.get("e") === "1";
@@ -1924,6 +1959,76 @@ var DATA = __DATA__;
     details.appendChild(ul); box.appendChild(details);
   }
 
+  function discoveryUnavailable() {
+    return (state.brand !== "all" && !BRAND_MAP.has(state.brand)) || (state.series !== "all" && !SERIES_MAP.has(state.series));
+  }
+
+  function officialDiscoveryLink(url, label) {
+    var a = el("a", null, label);
+    try {
+      var u = new URL(url);
+      if (u.protocol !== "https:" || u.username || u.password) return document.createTextNode(label);
+      a.href = u.href; a.target = "_blank"; a.rel = "noopener noreferrer";
+    } catch (err) { return document.createTextNode(label); }
+    return a;
+  }
+
+  function renderDiscovery() {
+    [["brand", BRAND_MAP, "發行／品牌"], ["series", SERIES_MAP, "策展系列"]].forEach(function (spec) {
+      var key = spec[0], map = spec[1], select = document.getElementById(key);
+      select.textContent = "";
+      var all = el("option", null, spec[2] + (DISC.status === "ready" ? "：全部" : "：分類暫不可用"));
+      all.value = "all"; select.appendChild(all);
+      map.forEach(function (value, id) {
+        var o = el("option", null, value.info.label + (value.info.endDate && value.info.endDate < NOW.date ? "（已結束）" : ""));
+        o.value = id; select.appendChild(o);
+      });
+      if (state[key] !== "all" && !map.has(state[key])) {
+        var missing = el("option", null, "分類暫不可用：" + state[key]);
+        missing.value = state[key]; select.appendChild(missing);
+      }
+      select.value = state[key];
+      select.disabled = DISC.status !== "ready" && state[key] === "all";
+    });
+    var box = document.getElementById("discovery-note");
+    box.textContent = "";
+    box.hidden = state.saved || (state.brand === "all" && state.series === "all");
+    if (box.hidden) return;
+    box.appendChild(el("b", null, discoveryUnavailable() ? "所選分類目前不可用" : "只顯示已核對的片單／系列場次"));
+    box.appendChild(el("p", null, "片單與系列目前僅部分收錄；未列出不代表沒有放映。分類核對日期與場次更新時間不同，票券能否使用仍須確認官方規則。"));
+    if (discoveryUnavailable()) box.appendChild(el("p", null, "此版本未提供所選分類，沒有自動改查全部。可清除此分類，繼續使用一般場次查詢。"));
+    [[state.brand, BRAND_MAP, false], [state.series, SERIES_MAP, true]].forEach(function (spec) {
+      var selected = spec[1].get(spec[0]);
+      if (!selected) return;
+      var info = selected.info, isSeries = spec[2], details = el("details"), ul = el("ul");
+      details.appendChild(el("summary", null, info.label + "｜查看已核對" + (isSeries ? "系列公告" : "片單") + "與來源"));
+      details.appendChild(el("p", null, info.description));
+      details.appendChild(el("p", null, "資料核對：" + info.checkedAt + (isSeries ? "；活動期間 " + info.startDate + "～" + info.endDate : "")));
+      details.appendChild(officialDiscoveryLink(info.url, isSeries ? "官方系列說明" : "官方片單"));
+      info.entries.forEach(function (entry) {
+        var li = el("li");
+        li.appendChild(el("b", null, entry.title + (!isSeries && entry.english ? " / " + entry.english : "")));
+        if (isSeries) li.appendChild(el("div", null, entry.cinema + "・" + entry.date + " " + entry.time));
+        var hasMatch = isSeries ? entry.rows.length : entry.movies.length;
+        var ended = isSeries && (entry.date < NOW.date || (entry.date === NOW.date && toMins(entry.time) < NOW.mins));
+        li.appendChild(el("div", null, (ended ? "已開演／已結束" : hasMatch ? "本站已核對場次；結果仍受日期、地區等條件限制" : "官方已列出；本站尚無可核對場次，不代表沒有放映") + "；核對 " + entry.checkedAt));
+        li.appendChild(officialDiscoveryLink(entry.url, isSeries ? "官方公告" : "官方電影介紹"));
+        if (!isSeries && hasMatch) {
+          entry.movies.forEach(function (mi) {
+            var show = el("button", "clear", "查本站場次");
+            show.onclick = function () { openMovie(mi); };
+            li.appendChild(show);
+          });
+        }
+        ul.appendChild(li);
+      });
+      details.appendChild(ul); box.appendChild(details);
+    });
+    var clear = el("button", "clear", "清除片單／系列條件");
+    clear.onclick = function () { state.brand = "all"; state.series = "all"; state.limit = 40; render(); };
+    box.appendChild(clear);
+  }
+
   function render() {
     var before = NOW.date;
     NOW = taipeiNow();
@@ -1934,6 +2039,7 @@ var DATA = __DATA__;
     renderLangOptions();
     renderFormatOptions();
     renderCoverage();
+    renderDiscovery();
     updateFavoriteControls();
     document.querySelector(".controls").hidden = state.saved;
     var sessionHint = document.getElementById("session-hint");
@@ -1958,6 +2064,7 @@ var DATA = __DATA__;
     document.getElementById("planner").hidden = state.view !== "plan";
     var extraCount = (state.sort !== "area" ? 1 : 0) + (state.slot !== "all" ? 1 : 0)
       + (state.lang !== "all" ? 1 : 0) + (state.format !== "all" ? 1 : 0)
+      + (state.brand !== "all" ? 1 : 0) + (state.series !== "all" ? 1 : 0)
       + (state.onlyEvent ? 1 : 0) + (state.onlyFav ? 1 : 0) + (state.showPast ? 1 : 0)
       + (state.showEnd ? 1 : 0) + (myPos ? 1 : 0);
     document.getElementById("more-filters").textContent = extraCount ? "篩選 " + extraCount : "篩選";
@@ -1985,10 +2092,11 @@ var DATA = __DATA__;
     b.appendChild(el("b", null, rows.length.toLocaleString("en-US")));
     b.appendChild(document.createTextNode(" 個場次"));
     sum.appendChild(b);
-    if (state.area !== "全部" || state.slot !== "all" || state.lang !== "all" || state.format !== "all" || state.onlyEvent || state.onlyFav || state.showPast || state.q || state.sort !== "area" || state.maxPrice !== "all" || state.maxDist !== "all") {
+    if (state.area !== "全部" || state.slot !== "all" || state.lang !== "all" || state.format !== "all" || state.brand !== "all" || state.series !== "all" || state.onlyEvent || state.onlyFav || state.showPast || state.q || state.sort !== "area" || state.maxPrice !== "all" || state.maxDist !== "all") {
       var clr = el("button", "clear", "清除篩選");
       clr.onclick = function () {
         state.area = "全部"; state.slot = "all"; state.lang = "all"; state.format = "all"; state.onlyEvent = false; state.onlyFav = false; state.showPast = false; state.q = ""; state.sort = "area"; state.maxPrice = "all"; state.maxDist = "all";
+        state.brand = "all"; state.series = "all";
         document.getElementById("area").value = "全部";
         document.getElementById("slot").value = "all";
         document.getElementById("lang").value = "all";
@@ -2010,10 +2118,14 @@ var DATA = __DATA__;
       var wantsMotion = emptyIntent && emptyIntent.format && emptyIntent.format.label === "4D";
       var qCompact = state.q ? searchCompact(state.q) : "";
       var matchedCinemas = state.q ? C.filter(function (c) { return searchCompact(c[0]).indexOf(qCompact) >= 0; }) : [];
-      e.appendChild(el("b", null, state.view === "plan" ? "這段時間沒有合適場次"
+      e.appendChild(el("b", null, discoveryUnavailable() ? "所選分類目前不可用"
+        : state.brand !== "all" || state.series !== "all" ? "目前條件沒有已核對的分類場次"
+        : state.view === "plan" ? "這段時間沒有合適場次"
         : wantsMotion ? "目前條件找不到真正的 4D 場次"
         : matchedCinemas.length ? "有收錄「" + matchedCinemas.map(function (c) { return c[0]; }).join("、") + "」" : "這個條件查不到場次"));
-      e.appendChild(el("div", null, wantsMotion
+      e.appendChild(el("div", null, state.brand !== "all" || state.series !== "all"
+        ? "可查看上方官方片單／系列公告，或清除分類、換日期與地區再查。系列公告不會自行新增到本站場次，尚未取得或無法核對的場次也不會硬配。"
+        : wantsMotion
         ? "4D 只會比對 4DX／MX4D；ULTRA 3D 是 3D 規格，不會混在一起。可換日期或放寬其他條件再試。"
         : matchedCinemas.length
         ? "目前日期或篩選條件沒有可顯示場次。請查看上方資料範圍；尚未取得的日期，不代表戲院沒有排片。"
@@ -2196,6 +2308,9 @@ var DATA = __DATA__;
   document.getElementById("slot").onchange = function (e) { state.slot = e.target.value; state.limit = 40; render(); };
   document.getElementById("lang").onchange = function (e) { state.lang = e.target.value; state.limit = 40; render(); };
   document.getElementById("format").onchange = function (e) { state.format = e.target.value; state.limit = 40; render(); };
+  ["brand", "series"].forEach(function (key) {
+    document.getElementById(key).onchange = function (e) { state[key] = e.target.value; state.limit = 40; render(); };
+  });
   document.getElementById("sort").onchange = function (e) {
     state.sort = e.target.value;
     // 選了依距離卻還沒定位，直接幫他觸發，不要讓他選了卻沒反應
@@ -2252,14 +2367,14 @@ var DATA = __DATA__;
   setInterval(refreshClock, 60000);
 
   function syncInputs() {
-    ["area", "slot", "lang", "format", "sort", "q", "planStart", "planEnd", "maxPrice", "maxDist"].forEach(function (id) {
+    ["area", "slot", "lang", "format", "brand", "series", "sort", "q", "planStart", "planEnd", "maxPrice", "maxDist"].forEach(function (id) {
       document.getElementById(id).value = state[id];
     });
   }
 
   readUrl();
   // 從網址進來時若已帶進階條件，把面板展開——否則使用者看不出結果為什麼被篩過
-  if (!mobileQuery.matches && (state.lang !== "all" || state.format !== "all" || state.slot !== "all" || state.onlyEvent || state.onlyFav || state.showPast || state.showEnd)) setExtra(true);
+  if (!mobileQuery.matches && (state.lang !== "all" || state.format !== "all" || state.brand !== "all" || state.series !== "all" || state.slot !== "all" || state.onlyEvent || state.onlyFav || state.showPast || state.showEnd)) setExtra(true);
   syncInputs();
   updateCompactControls();
   render();
