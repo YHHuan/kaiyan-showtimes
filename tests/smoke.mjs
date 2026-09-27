@@ -123,6 +123,41 @@ async function checkVersionLayouts() {
   console.log(`production labels OK: ${cases.length} 組多版本真實場次，跨日期／戲院與內頁／320、390、1280px`);
 }
 
+async function checkDiscovery() {
+  const samples = await page.evaluate(() => {
+    if (DATA.discovery?.status !== 'ready') return [];
+    const rows = DATA.packed.split(';').filter(Boolean).flatMap(g => {
+      const f = g.split(','), mi = parseInt(f[1], 36), di = parseInt(f[2], 36);
+      return f[6].split('.').map(() => ({ mi, di }));
+    });
+    return [
+      ...DATA.discovery.brands.map(b => ({ key: 'brand', id: b.id, indices: rows.flatMap((r, i) => b.movies.includes(r.mi) ? [i] : []) })),
+      ...DATA.discovery.series.map(s => ({ key: 'series', id: s.id, indices: s.rows })),
+    ].map(s => {
+      const date = s.indices.length ? DATA.dates[rows[s.indices[0]].di] : DATA.dates[0];
+      return { key: s.key, id: s.id, date, count: s.indices.filter(i => DATA.dates[rows[i].di] === date).length };
+    });
+  });
+  const context = await browser.newContext();
+  try {
+    const p = await context.newPage({ viewport: { width: 390, height: 844 } });
+    p.on('pageerror', err => errors.push(err.message));
+    await p.clock.setFixedTime(new Date(fixtureDay + 'T00:00:00+08:00'));
+    for (const sample of samples) {
+      for (const view of ['movie', 'cinema']) {
+        await p.goto(base + '?' + new URLSearchParams({ [sample.key]: sample.id, d: sample.date, v: view, n: '1' }), { waitUntil: 'domcontentloaded' });
+        const count = Number((await p.locator('#summary b').last().innerText()).replace(/,/g, ''));
+        if (count !== sample.count) throw new Error('正式片單篩選場次不符：' + JSON.stringify({ sample, count, view }));
+        if (!await p.locator('#discovery-note').isVisible()) throw new Error('正式片單缺少核對範圍提示');
+        await p.locator('#discovery-note summary').click();
+        if (!await p.locator('#discovery-note a').count()) throw new Error('正式片單缺少官方來源');
+        if (!await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)) throw new Error('正式片單手機排版溢出');
+      }
+    }
+  } finally { await context.close(); }
+  console.log(`production discovery OK: ${samples.length} 分類，含零場次／來源／電影與戲院檢視`);
+}
+
 try {
   const response = await page.goto(base, { waitUntil: 'domcontentloaded' });
   if (!response?.ok()) throw new Error(`首頁 HTTP ${response?.status()}`);
@@ -292,6 +327,7 @@ try {
   const seoResponse = await page.request.get(new URL(moviePath.replace(/^\//, ''), base).href);
   if (!seoResponse.ok() || !(await seoResponse.text()).includes('電影時刻')) throw new Error('電影索引頁無法讀取');
   await checkVersionLayouts();
+  await checkDiscovery();
   if (errors.length) throw new Error(`瀏覽器錯誤：${errors.join(' | ')}`);
   console.log(`smoke OK: ${status.counts.sessions} 場、${status.counts.cinemas} 影城、${status.counts.movies} 部片`);
 } finally {

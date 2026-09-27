@@ -9,6 +9,7 @@ import { matchKey, foldTitle, truncatedTitleKey, trustedMovieMeta } from './lib/
 import { normalizeMovieRecords, canonicalMetadata, MOVIE_ALIASES } from './lib/movie-identity.mjs';
 import { cinemaCoverage, selectScheduleRows, cinemaName, CINEMA_ALIASES } from './lib/cinema-coverage.mjs';
 import { cleanAtmoviesTags } from './lib/schedule-parsers.mjs';
+import { loadDiscovery } from './lib/discovery.mjs';
 
 const root = new URL('.', import.meta.url).pathname;
 const SITE_URL = (process.env.SITE_URL || 'https://yhhuan.github.io/kaiyan-showtimes').replace(/\/$/, '');
@@ -455,6 +456,10 @@ const payload = {
   cinemaAliases: CINEMA_ALIASES,
   updatedAt: new Date().toISOString(),
 };
+
+// 分類是可停用的旁掛資料，不能參與電影歸戶、壓縮場次、海報或收藏鍵。
+payload.discovery = await loadDiscovery(`${root}catalog/discovery.json`, payload, runtimeEvidence,
+  { enabled: process.env.DISCOVERY_ENABLED !== '0' });
 
 // JSON 會直接放進 <script>。即使上游片名出現 </script> 也不能讓它提早關閉標籤；
 // U+2028/U+2029 則避開舊 JavaScript parser 對行分隔字元的差異。
