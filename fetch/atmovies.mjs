@@ -168,9 +168,18 @@ export async function fetchAtmovies({ targets = CINEMAS, previous = [], status =
       const html = await fetchPage(rootUrl);
       try { first = parseAtmovies(html, configWithCode); }
       catch (e) {
-        // 午夜時根頁快取可能仍是昨天；明確日期頁仍須通過頁面日期檢查。
-        if (!e.message.includes('場次日期不符')) throw e;
-        first = parseAtmovies(await fetchPage(rootUrl + today.replace(/-/g, '') + '/'), configWithCode);
+        // 根頁可能仍是昨天，或只回日期標頭卻缺少場次表。HTTP 成功不等於資料完整。
+        // 明確日期頁也可能暫時空白；最後只重讀根頁一次，不能改日期或接受空白當成功。
+        const invalidPage = error => /場次日期不符|場次解析不完整/.test(error.message);
+        if (!invalidPage(e)) throw e;
+        log('  ' + config.name + ': 根頁驗證失敗，核對明確日期頁');
+        try {
+          first = parseAtmovies(await fetchPage(rootUrl + today.replace(/-/g, '') + '/'), configWithCode);
+        } catch (datedError) {
+          if (!invalidPage(datedError)) throw datedError;
+          log('  ' + config.name + ': 日期頁驗證失敗，最後重讀根頁一次');
+          first = parseAtmovies(await fetchPage(rootUrl), configWithCode);
+        }
       }
     } catch (e) {
       cinemas[config.name] = { state: 'failed', area: config.area, url: config.official, error: e.message };
