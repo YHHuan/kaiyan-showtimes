@@ -11,16 +11,18 @@
 //   - 光點華山電影館、府中15：已有 fetch/arthouse.mjs 直接抓官網（spot-hs.org.tw /
 //     fuzhong15.ntpc.gov.tw），資料更完整（多天、真廳別），這裡刻意不重複收，避免同一場次
 //     用不同 hall/tags 值在合併後被當成兩筆不同紀錄。
-//   - 秀泰、國賓、美麗華、喜樂時代、in89、樂聲：這些連鎖已有其他 fetch/*.mjs 涵蓋
+//   - 國賓、美麗華、喜樂時代、in89、樂聲：這些連鎖已有其他 fetch/*.mjs 涵蓋
 //     官方資料，不用開眼補。
 //   - 威秀／MUVIE：我們從來沒有官方資料，這裡無條件抓（見下方 VIESHOW）。
-//   - 新光、美麗新、王牌：官方與備援都抓取，建站逐館逐日選用（lib/cinema-coverage.mjs），
+//   - 秀泰、新光、美麗新、王牌：官方與備援都抓取，建站逐館逐日選用（lib/cinema-coverage.mjs），
 //     避免同一館兩份不同命名/來源的資料重複上架，也避免全來源總量掩蓋單館缺漏。
 //
 // 編碼：伺服器回應 Content-Type: text/html;charset=UTF-8，且動態內容（片名/場次）本身
 // 就是合法 UTF-8；只有頁面最上方少數寫死的 <meta name="author"/"copyright"> 樣板字串是舊站
 // 遺留的亂碼（U+FFFD），跟場次資料無關，不影響解析。
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { politeFetch, saveRecords, todayISO } from '../lib/common.mjs';
 import { parseAtmovies, cleanAtmoviesTags } from '../lib/schedule-parsers.mjs';
 import { SK_CINEMAS } from '../lib/cinema-coverage.mjs';
@@ -123,55 +125,88 @@ const ACECINEMA_BACKUP = {
   t04428: { name: '王牌映画影城', area: '台中市', region: 'a04', official: 'https://www.acecinema.com.tw/movie/all' },
 };
 
+// 2026-09-30 核對開眼各地區清單、分館地址與場次頁（/showtime/{code}/{region}/）。
+// 秀泰 bootstrap 會對 GitHub runner 回 403；不能等 72 小時快取失效後才發現全鏈缺館。
+// 名稱沿用官方來源，保留既有收藏／覆蓋名冊；開眼的「欣欣」「台中麗寶」「雲林北港」
+// 「高雄岡山」是同館簡稱。基隆的 t02g04 屬 a01，不可由戲院代碼猜地區。
+const SHOWTIMES_TICKETING = 'https://www.showtimes.com.tw/ticketing';
+export const SHOWTIMES_BACKUP = {
+  t02g04: { name: '基隆秀泰影城', area: '基隆市', region: 'a01', official: SHOWTIMES_TICKETING },
+  t02d03: { name: '台北欣欣秀泰影城', area: '台北市', region: 'a02', official: SHOWTIMES_TICKETING },
+  t02a13: { name: '大巨蛋秀泰影城', area: '台北市', region: 'a02', official: SHOWTIMES_TICKETING },
+  t02e13: { name: '樹林秀泰影城', area: '新北市', region: 'a02', official: SHOWTIMES_TICKETING },
+  t02e15: { name: '土城秀泰影城', area: '新北市', region: 'a02', official: SHOWTIMES_TICKETING },
+  t04410: { name: '台中站前秀泰影城', area: '台中市', region: 'a04', official: SHOWTIMES_TICKETING },
+  t04411: { name: '台中文心秀泰影城', area: '台中市', region: 'a04', official: SHOWTIMES_TICKETING },
+  t04413: { name: '台中麗寶秀泰影城', area: '台中市', region: 'a04', official: SHOWTIMES_TICKETING },
+  t04504: { name: '北港秀泰影城', area: '雲林縣', region: 'a45', official: SHOWTIMES_TICKETING },
+  t05504: { name: '嘉義秀泰影城', area: '嘉義市', region: 'a05', official: SHOWTIMES_TICKETING },
+  t06628: { name: '台南仁德秀泰影城', area: '台南市', region: 'a06', official: SHOWTIMES_TICKETING },
+  t07729: { name: '高雄岡山秀泰影城', area: '高雄市', region: 'a07', official: SHOWTIMES_TICKETING },
+  t07707: { name: '高雄夢時代秀泰影城', area: '高雄市', region: 'a07', official: SHOWTIMES_TICKETING },
+  t03801: { name: '花蓮秀泰影城', area: '花蓮縣', region: 'a38', official: SHOWTIMES_TICKETING },
+  t08902: { name: '台東秀泰影城', area: '台東縣', region: 'a89', official: SHOWTIMES_TICKETING },
+};
 
-const CINEMAS = { ...ARTHOUSE, ...VIESHOW, ...SKCINEMAS_BACKUP, ...MIRANEW_BACKUP, ...ACECINEMA_BACKUP };
+export const CINEMAS = { ...ARTHOUSE, ...VIESHOW, ...SKCINEMAS_BACKUP, ...MIRANEW_BACKUP, ...ACECINEMA_BACKUP, ...SHOWTIMES_BACKUP };
 // 官方與備援都保留，建站逐館逐日選新鮮官方優先；不能因其他分館總筆數夠多就略過漏館。
 for (const c of Object.values(CINEMAS)) {
   const sk = SK_CINEMAS.find(x => x.name === c.name);
   if (sk) c.official = 'https://www.skcinemas.com/Sessions/Sessions?cinemaId=' + sk.id;
 }
-const path = new URL('../data/atmovies.json', import.meta.url).pathname;
-let previous = [], status = {};
-try { previous = JSON.parse(await readFile(path, 'utf8')); } catch {}
-try { status = JSON.parse(await readFile(new URL('../data/_status.json', import.meta.url), 'utf8')); } catch {}
-const today = todayISO(), records = [], cinemas = {};
-const retain = (name, date) => previous.filter(r => r.cinema === name && r.date >= today && (!date || r.date === date))
-  .map(r => ({ ...r, tags: cleanAtmoviesTags(r.tags), fetchedAt: r.fetchedAt || status.atmovies?.fetchedAt || '1970-01-01T00:00:00Z' }));
-for (const [code, config] of Object.entries(CINEMAS)) {
-  const rootUrl = BASE + '/showtime/' + code + '/' + config.region + '/';
-  const configWithCode = { ...config, code, expectedDate: today };
-  let first;
-  try {
-    const html = await politeFetch(rootUrl);
-    try { first = parseAtmovies(html, configWithCode); }
-    catch (e) {
-      // 午夜時根頁快取可能仍是昨天；明確日期頁仍須通過頁面日期檢查。
-      if (!e.message.includes('場次日期不符')) throw e;
-      first = parseAtmovies(await politeFetch(rootUrl + today.replace(/-/g, '') + '/'), configWithCode);
-    }
-  } catch (e) {
-    cinemas[config.name] = { state: 'failed', area: config.area, url: config.official, error: e.message };
-    records.push(...retain(config.name));
-    console.log('  ' + config.name + ': 抓取失敗，保留尚未過期資料；' + e.message);
-    continue;
-  }
-  const failedDates = [], fresh = [];
-  for (const date of first.dates) {
-    if (date < today) continue;
+// 可注入固定頁面與時間，重現官方 403、備援缺日、舊快取到期而不連網或改正式 data/。
+export async function fetchAtmovies({ targets = CINEMAS, previous = [], status = {}, today = todayISO(),
+  fetchPage = politeFetch, timestamp = () => new Date().toISOString(), log = console.log } = {}) {
+  const records = [], cinemas = {};
+  const retain = (name, date) => previous.filter(r => r.cinema === name && r.date >= today && (!date || r.date === date))
+    .map(r => ({ ...r, tags: cleanAtmoviesTags(r.tags), fetchedAt: r.fetchedAt || status.atmovies?.fetchedAt || '1970-01-01T00:00:00Z' }));
+  for (const [code, config] of Object.entries(targets)) {
+    const rootUrl = BASE + '/showtime/' + code + '/' + config.region + '/';
+    const configWithCode = { ...config, code, expectedDate: today };
+    let first;
     try {
-      const parsed = date === today ? first : parseAtmovies(
-        await politeFetch(rootUrl + date.replace(/-/g, '') + '/'), { ...configWithCode, expectedDate: date });
-      fresh.push(...parsed.records.map(r => ({ ...r, fetchedAt: new Date().toISOString() })));
+      const html = await fetchPage(rootUrl);
+      try { first = parseAtmovies(html, configWithCode); }
+      catch (e) {
+        // 午夜時根頁快取可能仍是昨天；明確日期頁仍須通過頁面日期檢查。
+        if (!e.message.includes('場次日期不符')) throw e;
+        first = parseAtmovies(await fetchPage(rootUrl + today.replace(/-/g, '') + '/'), configWithCode);
+      }
     } catch (e) {
-      failedDates.push(date);
-      records.push(...retain(config.name, date));
-      console.log('  ' + config.name + ' ' + date + ': ' + e.message);
+      cinemas[config.name] = { state: 'failed', area: config.area, url: config.official, error: e.message };
+      records.push(...retain(config.name));
+      log('  ' + config.name + ': 抓取失敗，保留尚未過期資料；' + e.message);
+      continue;
     }
+    const failedDates = [], fresh = [];
+    for (const date of first.dates) {
+      if (date < today) continue;
+      try {
+        const parsed = date === today ? first : parseAtmovies(
+          await fetchPage(rootUrl + date.replace(/-/g, '') + '/'), { ...configWithCode, expectedDate: date });
+        fresh.push(...parsed.records.map(r => ({ ...r, fetchedAt: timestamp() })));
+      } catch (e) {
+        failedDates.push(date);
+        records.push(...retain(config.name, date));
+        log('  ' + config.name + ' ' + date + ': ' + e.message);
+      }
+    }
+    records.push(...fresh);
+    cinemas[config.name] = { state: failedDates.length ? 'partial' : 'ok', area: config.area, url: config.official,
+      announcedDates: first.dates, failedDates, ...(fresh.length ? { lastSuccessAt: timestamp() } : {}) };
+    log('  ' + config.name + ': ' + fresh.length + ' 筆 / ' + new Set(fresh.map(r => r.date)).size + ' 天'
+      + (failedDates.length ? '；' + failedDates.length + ' 天取得失敗' : ''));
   }
-  records.push(...fresh);
-  cinemas[config.name] = { state: failedDates.length ? 'partial' : 'ok', area: config.area, url: config.official,
-    announcedDates: first.dates, failedDates, ...(fresh.length ? { lastSuccessAt: new Date().toISOString() } : {}) };
-  console.log('  ' + config.name + ': ' + fresh.length + ' 筆 / ' + new Set(fresh.map(r => r.date)).size + ' 天'
-    + (failedDates.length ? '；' + failedDates.length + ' 天取得失敗' : ''));
+  return { records, cinemas };
 }
-await saveRecords(path, records, { cinemas, parserVersion: 3 });
+
+async function main() {
+  const path = fileURLToPath(new URL('../data/atmovies.json', import.meta.url));
+  let previous = [], status = {};
+  try { previous = JSON.parse(await readFile(path, 'utf8')); } catch {}
+  try { status = JSON.parse(await readFile(new URL('../data/_status.json', import.meta.url), 'utf8')); } catch {}
+  const { records, cinemas } = await fetchAtmovies({ previous, status });
+  await saveRecords(path, records, { cinemas, parserVersion: 3 });
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
