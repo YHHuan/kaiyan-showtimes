@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, copyFile, readFile, rm, writeFile } from 'node:fs/promi
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { runInNewContext } from 'node:vm';
 import { CINEMAS, SHOWTIMES_BACKUP, fetchAtmovies } from '../fetch/atmovies.mjs';
 import { cinemaCoverage, selectScheduleRows } from '../lib/cinema-coverage.mjs';
 import { markSourceFailed, saveRecords, todayISO } from '../lib/common.mjs';
@@ -141,6 +142,72 @@ test('午夜根頁仍是昨天時核對明確日期頁，不能直接把昨天�
     'https://www.atmovies.com.tw/showtime/t02g04/a01/20260930/']);
   assert.equal(result.records.length, 1);
   assert.equal(result.records[0].date, day);
+});
+
+test('根頁只有日期卻缺表時核對同日明確頁，不把空白當成無放映', async () => {
+  const requests = [];
+  const result = await fetchAtmovies({ targets: { t02g04: config }, today: day,
+    timestamp: () => stamp, log: quiet, fetchPage: async url => {
+      requests.push(url);
+      return url.endsWith('/20260930/') ? page() : '<h3>2026/09/30 (三)</h3>';
+    } });
+  assert.equal(requests.length, 2);
+  assert.equal(result.records.length, 1);
+  assert.equal(result.records[0].fetchedAt, stamp);
+});
+
+test('日期頁也不完整時僅再讀根頁一次；重試成功需通過完整解析', async () => {
+  const requests = [];
+  const result = await fetchAtmovies({ targets: { t02g04: config }, today: day,
+    timestamp: () => stamp, log: quiet, fetchPage: async url => {
+      requests.push(url);
+      return requests.length === 3 ? page() : '<h3>2026/09/30 (三)</h3>';
+    } });
+  assert.deepEqual(requests, ['https://www.atmovies.com.tw/showtime/t02g04/a01/',
+    'https://www.atmovies.com.tw/showtime/t02g04/a01/20260930/',
+    'https://www.atmovies.com.tw/showtime/t02g04/a01/']);
+  assert.equal(result.records.length, 1);
+  assert.equal(result.cinemas[config.name].state, 'ok');
+});
+
+test('三次頁面都不完整就失敗，不能無限重試、改日期或刷新舊列時間', async () => {
+  let calls = 0;
+  const old = row('atmovies', config.name, day, expired);
+  const result = await fetchAtmovies({ targets: { t02g04: config }, previous: [old], today: day,
+    timestamp: () => stamp, log: quiet, fetchPage: async () => {
+      calls++;
+      return calls === 3 ? page('2026-09-29') : '<h3>2026/09/30 (三)</h3>';
+    } });
+  assert.equal(calls, 3);
+  assert.equal(result.cinemas[config.name].state, 'failed');
+  assert.equal(result.cinemas[config.name].lastSuccessAt, undefined);
+  assert.equal(result.records[0].fetchedAt, expired);
+  assert.deepEqual(selectScheduleRows(result.records, { atmovies: { fetchedAt: stamp } }, now), []);
+});
+
+test('手動只刷新開眼不改排程，不和快取重建混用，也不跳過健康／瀏覽器檢查', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/update.yml', import.meta.url), 'utf8');
+  const step = name => workflow.split('- name: ' + name + '\n')[1]?.split(/\n      - /)[0];
+  const condition = (name, event, rebuild, refresh) => {
+    const expression = step(name)?.match(/if: \$\{\{ (.*?) \}\}/)?.[1];
+    assert.ok(expression, name);
+    return runInNewContext(expression, { github: { event_name: event },
+      inputs: { rebuild_only: rebuild, refresh_atmovies_only: refresh } });
+  };
+  for (const event of ['schedule', 'workflow_dispatch']) {
+    for (const rebuild of [false, true]) for (const refresh of [false, true]) {
+      const manual = event === 'workflow_dispatch';
+      assert.equal(condition('拒絕互斥更新模式', event, rebuild, refresh), manual && rebuild && refresh);
+      assert.equal(condition('抓取所有來源', event, rebuild, refresh), !manual || (!rebuild && !refresh));
+      assert.equal(condition('只重抓開眼備援', event, rebuild, refresh), manual && refresh);
+      assert.equal(condition('快取重建也納入本機新光補充', event, rebuild, refresh), manual && (rebuild || refresh));
+    }
+  }
+  assert.match(workflow, /cron: '17 21 \* \* \*'/);
+  assert.match(workflow, /cron: '17 9 \* \* \*'/);
+  assert.match(step('健康檢查'), /run: node check_health\.mjs/);
+  assert.match(step('瀏覽器冒煙測試'), /run: npm run smoke/);
+  assert.doesNotMatch(step('健康檢查') + step('瀏覽器冒煙測試'), /if:|continue-on-error/);
 });
 
 test('實際建站把有備援的秀泰標示為開眼來源，無備援時仍誠實列為缺資料', async () => {

@@ -12,6 +12,10 @@ on:
         description: '只用快取重建網頁（介面更新用，仍執行資料健康檢查與瀏覽器測試）'
         type: boolean
         default: false
+      refresh_atmovies_only:
+        description: '只重抓開眼備援，其餘沿用原始時間的快取（仍需通過健康檢查與瀏覽器測試）'
+        type: boolean
+        default: false
 
 # 同時只跑一份，避免兩輪互相蓋掉 data/
 concurrency:
@@ -31,6 +35,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - name: 拒絕互斥更新模式
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_only && inputs.refresh_atmovies_only }}
+        run: |
+          echo '::error::rebuild_only 與 refresh_atmovies_only 不可同時啟用'
+          exit 1
+
       # 第三方 Actions 固定到完整 commit SHA；版本註解方便 Dependabot 提醒升級。
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -64,12 +74,16 @@ jobs:
           ffmpeg -version | head -1
 
       - name: 抓取所有來源
-        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.rebuild_only }}
+        if: ${{ github.event_name != 'workflow_dispatch' || (!inputs.rebuild_only && !inputs.refresh_atmovies_only) }}
         run: bash run-all.sh
         continue-on-error: true   # 個別來源失敗不該中止整條流程，交給健康檢查裁決
 
+      - name: 只重抓開眼備援
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_atmovies_only }}
+        run: node fetch/atmovies.mjs
+
       - name: 快取重建也納入本機新光補充
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.rebuild_only }}
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.rebuild_only || inputs.refresh_atmovies_only) }}
         run: node fetch/local_skcinemas.mjs
 
       # 即使是介面快取重建，也不能沿用尚未核對電影版本的舊 metadata。
