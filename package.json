@@ -13,6 +13,6 @@
     "local:install": "node scripts/install-local-skcinemas-task.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.60.0"
+    "playwright": "^1.63.0"
   }
 }
