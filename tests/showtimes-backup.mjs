@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, copyFile, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { CINEMAS, SHOWTIMES_BACKUP, fetchAtmovies } from '../fetch/atmovies.mjs';
 import { cinemaCoverage, selectScheduleRows } from '../lib/cinema-coverage.mjs';
 import { markSourceFailed, saveRecords, todayISO } from '../lib/common.mjs';
@@ -140,4 +141,39 @@ test('午夜根頁仍是昨天時核對明確日期頁，不能直接把昨天�
     'https://www.atmovies.com.tw/showtime/t02g04/a01/20260930/']);
   assert.equal(result.records.length, 1);
   assert.equal(result.records[0].date, day);
+});
+
+test('實際建站把有備援的秀泰標示為開眼來源，無備援時仍誠實列為缺資料', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'kaiyan-showtimes-build-'));
+  try {
+    await mkdir(join(scratch, 'data'));
+    await mkdir(join(scratch, 'lib'));
+    for (const file of ['build_site.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs',
+      'lib/cinema-coverage.mjs', 'lib/schedule-parsers.mjs', 'lib/discovery.mjs']) {
+      await copyFile(new URL('../' + file, import.meta.url), join(scratch, file));
+    }
+    const current = todayISO(), currentStamp = new Date().toISOString();
+    const oldStamp = new Date(Date.now() - 73 * 3600000).toISOString();
+    const official = Object.values(SHOWTIMES_BACKUP).map(c => row('showtimes', c.name, current, oldStamp));
+    const backup = Object.values(SHOWTIMES_BACKUP).map(c => ({ ...row('atmovies', c.name, current, currentStamp), area: c.area }));
+    await writeFile(join(scratch, 'data', 'showtimes.json'), JSON.stringify(official));
+    await writeFile(join(scratch, 'data', '_status.json'), JSON.stringify({
+      showtimes: { fetchedAt: oldStamp }, atmovies: { fetchedAt: currentStamp },
+    }));
+    const build = async records => {
+      await writeFile(join(scratch, 'data', 'atmovies.json'), JSON.stringify(records));
+      execFileSync(process.execPath, [join(scratch, 'build_site.mjs')], { cwd: scratch, stdio: 'pipe' });
+      return JSON.parse(await readFile(join(scratch, 'out', 'site-status.json'), 'utf8'));
+    };
+    const restored = await build(backup);
+    assert.equal(restored.counts.sessions, 15);
+    assert.equal(restored.coverage.cinemas.length, 15);
+    assert.ok(restored.coverage.cinemas.every(c => c.count === 1 && c.sources[0] === 'atmovies'));
+    assert.ok(restored.warnings.viaBackup.includes('秀泰'));
+    assert.ok(!restored.warnings.absent.includes('秀泰'));
+    assert.ok(restored.warnings.staleSources.some(s => s.startsWith('showtimes(')));
+    const missing = await build([row('atmovies', '其他影城', current, currentStamp)]);
+    assert.ok(missing.warnings.absent.includes('秀泰'));
+    assert.ok(!missing.warnings.viaBackup.includes('秀泰'));
+  } finally { await rm(scratch, { recursive: true, force: true }); }
 });
