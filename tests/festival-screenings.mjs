@@ -98,7 +98,9 @@ test('new favorites only, rereads other-tab edits, preserves original and refuse
   const store = storage(original); saveFestivalSession(store, row); saveFestivalSession(store, second);
   assert.equal(readFestivalSessions(store).length, 2); removeFestivalSession(store, row.id); assert.deepEqual(readFestivalSessions(store), [second]);
   for (const [k, v] of Object.entries(original)) assert.equal(store.getItem(k), v);
-  store.setItem(SCREENINGS_KEY, '{broken'); assert.throws(() => saveFestivalSession(store, row)); assert.equal(store.getItem(SCREENINGS_KEY), '{broken');
+  for (const bad of ['{broken', '', 'null', '{}']) {
+    store.setItem(SCREENINGS_KEY, bad); assert.throws(() => saveFestivalSession(store, row)); assert.equal(store.getItem(SCREENINGS_KEY), bad);
+  }
   const full = storage({ [SCREENINGS_KEY]: JSON.stringify([row]) }); full.setItem = () => { throw new Error('quota'); };
   assert.throws(() => removeFestivalSession(full, row.id)); assert.deepEqual(readFestivalSessions(full), [row]);
 });
