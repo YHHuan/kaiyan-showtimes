@@ -22,23 +22,30 @@
       <section class="intro" aria-labelledby="title">
         <p class="eyebrow">多留一天，給喜歡的電影</p>
         <h1 id="title">影展日曆<span class="edition">附加功能・試行版</span></h1>
-        <p>先看哪裡有影展，再替想看的場次留個位置。</p>
+        <p>不是收藏整個影展，是替想看的那一場留個位置。</p>
       </section>
       <p id="load-error" class="notice" role="status">正在讀取日曆；原本的場次查詢不受影響。</p>
       <noscript><p class="notice">月曆需要 JavaScript；你仍可<a href="../">返回場次查詢</a>。</p></noscript>
       <div id="app" hidden>
         <div class="mode-tabs" role="group" aria-label="日曆內容">
-          <button type="button" id="mode-festivals" aria-pressed="true">影展檔期</button>
+          <button type="button" id="mode-screenings" aria-pressed="true">影展場次</button>
           <button type="button" id="mode-saved" aria-pressed="false">我的場次</button>
+          <button type="button" id="mode-festivals" aria-pressed="false">影展檔期</button>
         </div>
         <p id="mode-note" class="muted"></p>
+        <div class="filters" id="screening-filters">
+          <label>影展 <select id="festival-select"><option value="all">全部收錄影展</option></select></label>
+          <label class="search">找片 <input id="film-search" type="search" maxlength="200" placeholder="片名、英文片名或已收錄合輯短片"></label>
+          <label class="check"><input type="checkbox" id="upcoming-only" checked>只看未開演</label>
+        </div>
+        <details id="sources" class="sources"><summary id="source-summary"></summary><div id="source-list"></div><p class="state">來源改版或更新不完整時保留上次資料與原時間，不推定停映；未接入的場次請至官方核對。</p></details>
         <div class="filters" id="festival-filters">
           <label>地區 <select id="city"><option value="all">全部地區</option></select></label>
           <label class="check"><input type="checkbox" id="followed-only">只看我關注的影展</label>
         </div>
         <div class="filters" id="saved-filters" hidden>
           <label>跨戲院轉場預留 <select id="buffer"><option value="0">不另預留</option><option value="15" selected>15 分鐘</option><option value="30">30 分鐘</option><option value="60">60 分鐘</option></select></label>
-          <a href="../?saved=1">新增／取消場次請到我的收藏 →</a>
+          <a href="../?saved=1">管理原本院線收藏 →</a>
         </div>
         <p id="storage-note" class="notice" role="status" hidden></p>
         <p id="data-note" class="notice" hidden></p>
@@ -53,7 +60,7 @@
           <section class="calendar-panel" aria-label="月份日曆">
             <div class="weekdays" aria-hidden="true"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
             <div id="calendar" class="calendar" role="group" aria-labelledby="month-title"></div>
-            <p class="muted legend">點日期看完整清單。色帶是影展期間，不代表每天都有放映；圓點與數字是你的收藏場次。</p>
+            <p class="muted legend" id="legend"></p>
           </section>
           <section id="day-agenda" class="agenda" tabindex="-1" aria-labelledby="day-title">
             <p class="eyebrow">這一天</p><h2 id="day-title"></h2>
@@ -65,6 +72,7 @@
           <p id="export-note" class="muted"></p>
           <p id="conflict-note" class="notice" hidden></p>
           <div id="month-items" class="cards"></div>
+          <button id="show-more" type="button" hidden>再顯示 40 場</button>
         </section>
         <p id="action-status" class="muted" role="status" aria-live="polite"></p>
       </div>

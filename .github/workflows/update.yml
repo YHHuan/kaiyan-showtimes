@@ -94,6 +94,14 @@ jobs:
       - name: 健康檢查
         run: node check_health.mjs
 
+      # 獨立快取子目錄，不加入院線 source health；整個附加來源最多四分鐘。
+      # 手動的「只用快取／只抓開眼」仍維持原本語意，不額外抓影展。
+      - name: 更新附加影展場次
+        if: ${{ github.event_name != 'workflow_dispatch' || (!inputs.rebuild_only && !inputs.refresh_atmovies_only) }}
+        run: node fetch/festivals.mjs
+        timeout-minutes: 4
+        continue-on-error: true
+
       - name: 重建網頁
         run: node build_site.mjs
 
