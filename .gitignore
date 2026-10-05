@@ -5,6 +5,7 @@ _site/
 
 # 每輪重抓的產物，不進版本控制（CI 用 actions/cache 保存）
 data/*.json
+data/festivals/
 !data/movie_meta.json
 !data/_history.json
 assets/posters/

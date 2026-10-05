@@ -653,7 +653,7 @@ await writeFile(`${root}out/robots.txt`, `User-agent: *\nAllow: /\nSitemap: ${SI
 try {
   const { buildFestivalCalendar } = await import('./build_festivals.mjs');
   const calendar = await buildFestivalCalendar({ root, payload, enabled: process.env.FESTIVAL_CALENDAR_ENABLED !== '0' });
-  console.log(`  影展日曆：${calendar.festivals} 檔人工核對檔期（不新增場次）`);
+  console.log(`  影展日曆：${calendar.festivals} 檔人工核對檔期、${calendar.screenings} 場獨立影展資料（不加入院線資料）`);
 } catch (error) {
   console.warn('  影展日曆不可用，一般場次保留：' + error.message);
   // 覆蓋舊入口，不能留下上一次成功建置的日曆假裝是本輪資料。

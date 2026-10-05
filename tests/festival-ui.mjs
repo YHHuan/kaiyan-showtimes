@@ -8,6 +8,7 @@ import { chromium } from 'playwright';
 import { buildFestivalCalendar } from '../build_festivals.mjs';
 import { FOLLOW_KEY } from '../lib/festival-calendar.mjs';
 import { festivalFixture, now } from './festival-fixture.mjs';
+import { screeningFixture } from './festival-screenings-fixture.mjs';
 
 const { catalog, data, saved, tuples } = festivalFixture();
 const scratch = await mkdtemp(join(tmpdir(), 'kaiyan-festival-ui-'));
@@ -15,7 +16,7 @@ let server, browser;
 try {
   for (const dir of ['data', 'lib', 'catalog', 'web/festivals']) await mkdir(join(scratch, dir), { recursive: true });
   const files = ['build_site.mjs', 'build_festivals.mjs', 'site_template.html', 'lib/common.mjs', 'lib/movie-identity.mjs',
-    'lib/cinema-coverage.mjs', 'lib/schedule-parsers.mjs', 'lib/discovery.mjs', 'lib/festival-calendar.mjs',
+    'lib/cinema-coverage.mjs', 'lib/schedule-parsers.mjs', 'lib/discovery.mjs', 'lib/festival-calendar.mjs', 'lib/festival-screenings.mjs',
     'catalog/discovery.json', 'web/festivals/index.html', 'web/festivals/style.css', 'web/festivals/app.mjs'];
   for (const file of files) await copyFile(new URL('../' + file, import.meta.url), join(scratch, file));
   const sourceRows = tuples.map(([ci, mi, di, hi, ti, ui, mins]) => ({ source: 'fixture', movie: data.movies[mi][0],
@@ -34,8 +35,14 @@ try {
   }
   build(false); const baseline = await corePayload();
   assert.match(await readFile(join(scratch, 'out/festivals/index.html'), 'utf8'), /暫時不可用/);
+  await mkdir(join(scratch, 'data/festivals'), { recursive: true });
+  await writeFile(join(scratch, 'data/festivals/screenings.json'), JSON.stringify(screeningFixture().feed));
   assert.match(build(true).log, /影展日曆：3 檔/);
   assert.deepEqual(await corePayload(), baseline, 'optional calendar never changes any core DATA field');
+  assert.equal(JSON.parse(await readFile(join(scratch, 'out/festivals/data.json'), 'utf8')).screenings.sources[0].rows.length, 2, 'nested feed only enters optional output');
+  await writeFile(join(scratch, 'data/festivals/screenings.json'), '{broken');
+  build(true); assert.deepEqual(await corePayload(), baseline, 'broken nested feed never changes core DATA');
+  await rm(join(scratch, 'data/festivals/screenings.json'));
   await writeFile(join(scratch, 'catalog/festivals.json'), '{broken');
   build(true);
   assert.deepEqual(await corePayload(), baseline, 'malformed catalog cannot fail or change main build');
@@ -66,7 +73,7 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   page.on('request', r => { if (!r.url().startsWith(base)) network.push(r.url()); });
   await page.clock.setFixedTime(new Date(now));
-  await page.goto(base + '/festivals/');
+  await page.goto(base + '/festivals/?view=festivals');
   await page.locator('#app').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#calendar .day').count(), 42);
   assert.match(await page.locator('#month-title').innerText(), /2099 年 1 月/);
@@ -132,6 +139,7 @@ try {
   assert.match(await page.locator('#list').innerText(), /我的收藏/);
   assert.equal(await page.locator('.saved-session').count(), saved.length, 'return to ordinary saved view remains functional');
   await page.locator('.festival-link').click(); await page.locator('#app').waitFor({ state: 'visible' });
+  await page.locator('#mode-festivals').click();
   const hostile = JSON.parse(readyData); hostile.festivals[0].name = '</script><img id="injected" src=x onerror="window.injected=1">';
   servedData = JSON.stringify(hostile);
   await page.reload(); await page.locator('#app').waitFor({ state: 'visible' });
@@ -148,7 +156,7 @@ try {
   servedData = readyData;
   const blocked = await context.newPage(); await blocked.clock.setFixedTime(new Date(now));
   await blocked.addInitScript(() => { Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage blocked'); } }); });
-  await blocked.goto(base + '/festivals/'); await blocked.locator('#app').waitFor({ state: 'visible' });
+  await blocked.goto(base + '/festivals/?view=festivals'); await blocked.locator('#app').waitFor({ state: 'visible' });
   assert.match(await blocked.locator('#storage-note').innerText(), /無法讀取/);
   await blocked.locator('#month-items [data-follow="test-one"]').click();
   assert.match(await blocked.locator('#action-status').innerText(), /無法儲存/);
@@ -156,7 +164,7 @@ try {
   await blocked.close();
   const quota = await context.newPage(); await quota.clock.setFixedTime(new Date(now));
   await quota.addInitScript(() => { Storage.prototype.setItem = () => { throw new DOMException('full', 'QuotaExceededError'); }; });
-  await quota.goto(base + '/festivals/'); await quota.locator('#app').waitFor({ state: 'visible' });
+  await quota.goto(base + '/festivals/?view=festivals'); await quota.locator('#app').waitFor({ state: 'visible' });
   const priorFollows = await quota.evaluate(key => localStorage.getItem(key), FOLLOW_KEY);
   await quota.locator('#month-items [data-follow="test-one"]').click();
   assert.match(await quota.locator('#action-status').innerText(), /無法儲存/);
