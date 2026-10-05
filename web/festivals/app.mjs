@@ -1,7 +1,7 @@
 import { validateFestivals, validDate, monthValid, shiftMonth, monthDays, taipeiDate, inPeriod, reviewOld,
   readFollows, toggleFollow, readSavedSessions, scheduleIndex, resolveSaved, conflicts, exportCalendar, FOLLOW_KEY } from './festival-calendar.mjs';
-import { SCREENINGS_KEY, emptyScreeningFeed, validateScreeningFeed, availableScreenings, resolveFestivalSessions,
-  readFestivalSessions, saveFestivalSession, removeFestivalSession, screeningSignature, sourceState, matchesScreening } from './festival-screenings.mjs';
+import { SCREENINGS_KEY, recoverScreeningFeed, availableScreenings, resolveFestivalSessions, screeningSources,
+  readFestivalSessions, saveFestivalSession, removeFestivalSession, screeningSignature, sourceState, matchesScreening } from './festival-screenings.mjs?v=xr1';
 
 const $ = id => document.getElementById(id);
 const el = (tag, className = '', value) => {
@@ -23,7 +23,7 @@ const today = taipeiDate();
 const initialMonth = monthValid(params.get('month')) ? params.get('month') : today.slice(0, 7);
 const state = { mode: ['saved', 'festivals'].includes(params.get('view')) ? params.get('view') : 'screenings', month: initialMonth,
   day: validDate(params.get('day')) && params.get('day').startsWith(initialMonth) ? params.get('day') : initialMonth === today.slice(0, 7) ? today : initialMonth + '-01',
-  city: 'all', followedOnly: false, buffer: 15, festival: 'all', query: '', upcoming: true, limit: 40 };
+  city: 'all', followedOnly: false, buffer: 15, festival: 'all', format: 'all', query: '', upcoming: true, limit: 40, dayLimit: 6 };
 let data, index, follows = [], saved = [], clashes = [], monthItems = [], festivalSaved = [], screenings = [];
 
 function notify(message) { $('action-status').textContent = message; }
@@ -59,8 +59,9 @@ function festivalCard(f) {
   });
   follow.dataset.follow = f.id; follow.setAttribute('aria-pressed', String(follows.includes(f.id)));
   actions.append(follow, link('官方節目／場次 →', f.programUrl, true));
-  if (data.screenings.sources.some(s => s.festivalId === f.id && s.rows.length)) actions.prepend(button('挑選個別場次', () => {
-    state.mode = 'screenings'; state.festival = f.id; state.query = ''; state.limit = 40;
+  if (screeningSources(data.screenings).some(s => s.festivalId === f.id && s.rows.length)) actions.prepend(button('挑選個別場次', () => {
+    state.mode = 'screenings'; state.festival = f.id; state.format = 'all'; state.query = ''; state.limit = 40; state.dayLimit = 6;
+    if ($('screening-kind')) $('screening-kind').value = 'all';
     $('festival-select').value = f.id; $('film-search').value = '';
     state.day = currentDay >= f.startDate && currentDay <= f.endDate ? currentDay : f.startDate;
     state.month = state.day.slice(0, 7); render(); $('day-agenda').focus();
@@ -83,7 +84,7 @@ function changeFavorite(id, action) {
   try {
     if (action === 'remove') removeFestivalSession(localStorage, id);
     else {
-      const row = data.screenings.sources.flatMap(s => s.rows).find(s => s.id === id);
+      const row = screeningSources(data.screenings).flatMap(s => s.rows).find(s => s.id === id);
       const current = availableScreenings(data.screenings, data.festivals).find(s => s.id === id);
       if (!row || current?.state !== 'current') { notify('此場目前無法核對，未更動收藏，請見官方。'); render(); return; }
       saveFestivalSession(localStorage, row);
@@ -95,12 +96,16 @@ function changeFavorite(id, action) {
 }
 function sessionCard(s, browse = false) {
   const card = el('article', 'item'); card.dataset.sessionState = s.state;
-  if (s.kind === 'festival') { card.dataset.screeningId = s.id; card.append(el('p', 'eyebrow', s.festivalName)); }
+  if (s.kind === 'festival') {
+    card.dataset.screeningId = s.id; card.dataset.screeningFormat = s.format;
+    card.append(el('p', 'eyebrow', s.festivalName + (s.format === 'xr' ? ' · XR 體驗' : '')));
+  }
   card.append(el('p', 'date-line', s.day + ' ' + timeLabel(s.start) + (s.end ? ' — ' + (taipeiDate(s.end) !== s.day ? '翌日 ' : '') + timeLabel(s.end) + (s.endKind === 'official' ? '（官網時段）' : '（估計）') : '')),
     el('h3', '', s.movie), el('p', 'muted', [s.cinema, s.hall, s.tag].filter(Boolean).join(' · ')),
     el('p', 'state' + (s.state === 'current' || s.state === 'past' ? '' : ' warn'), statusLabels[s.state]));
   if (s.kind === 'festival') {
-    if (s.films.length > 1) card.append(el('p', 'state', '合輯，一張場次：' + s.films.map(f => f.title).join('／')));
+    if (s.films.length > 1) card.append(el('p', 'state', (s.format === 'xr' ? '本體驗時段列有作品（選片方式依官方）：' : '合輯，一張場次：') + s.films.map(f => f.title).join('／')));
+    if (s.format === 'xr') card.append(el('p', 'state', '收藏不是預約或購票；語言、報到、設備準備與參與限制請核對官網。備註的座位數是容量，不是剩餘票數。'));
     if (s.englishTitle) card.append(el('p', 'state', s.englishTitle));
     if (s.end) card.append(el('p', 'state', s.endKind === 'official' ? '結束依官網時段；映後、休息及交通請另預留。' : '結束依片長估算，不另加預告；映後及交通請另預留。'));
   }
@@ -110,7 +115,7 @@ function sessionCard(s, browse = false) {
   const actions = el('div', 'actions');
   if (s.kind === 'festival') {
     const existing = festivalSaved.find(r => r.id === s.id);
-    const row = data.screenings.sources.flatMap(source => source.rows).find(r => r.id === s.id);
+    const row = screeningSources(data.screenings).flatMap(source => source.rows).find(r => r.id === s.id);
     const differs = existing && row && screeningSignature(existing) !== screeningSignature(row);
     if (browse) {
       const action = existing && !differs ? 'remove' : 'save';
@@ -145,6 +150,7 @@ function render() {
   const isFestival = state.mode === 'festivals', browse = state.mode === 'screenings', currentDay = taipeiDate();
   const visibleFestivals = data.festivals.filter(f => (state.city === 'all' || f.cities.includes(state.city)) && (!state.followedOnly || follows.includes(f.id)));
   const visibleScreenings = screenings.filter(s => (state.festival === 'all' || s.festivalId === state.festival)
+    && (state.format === 'all' || s.format === state.format)
     && (!state.upcoming || s.start > Date.now()) && matchesScreening(s, state.query));
   const displayedSessions = browse ? visibleScreenings : saved;
   const days = monthDays(state.month);
@@ -164,14 +170,16 @@ function render() {
   const stamp = new Date(data.generatedAt);
   $('data-note').hidden = state.mode !== 'saved';
   $('data-note').textContent = '院線資料版本：' + stamp.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false }) + '。院線散場依片長＋12分鐘估算；影展依官網時段或片長，不加 12 分鐘。映後、休息及交通請另預留，轉場預留不是實際交通時間。';
-  const sourceLabels = { current: '已取得', unverified: '本輪更新不完整，暫停新增／匯出', stale: '資料過舊或未成功取得', 'not-fetched': '尚未取得', unsupported: '尚未接入', retired: '本屆自動更新已結束', missing: '無資料' };
-  $('source-list').replaceChildren(...data.screenings.sources.map(source => {
+  const sourceLabels = { current: '已取得', pending: '官網目前無可讀場次，待公布／核對', unverified: '本輪更新不完整，暫停新增／匯出', stale: '資料過舊或未成功取得', 'not-fetched': '尚未取得', unsupported: '尚未接入', retired: '本屆自動更新已結束', missing: '無資料' };
+  const sources = screeningSources(data.screenings);
+  $('source-list').replaceChildren(...sources.map(source => {
     const p = el('p', 'state');
-    p.append((data.festivals.find(f => f.id === source.festivalId)?.shortName || source.festivalId) + '：' + sourceLabels[sourceState(source)] + ' · ' + source.rows.length + ' 場 · ' + source.scope,
-      el('br'), source.fetchedAt ? '最後成功取得 ' + new Date(source.fetchedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false }) + ' · ' : '', link('官方', source.url, true));
+    p.append((data.festivals.find(f => f.id === source.festivalId)?.shortName || source.festivalId) + (source.sourceId ? ' · XR' : '') + '：' + sourceLabels[sourceState(source)] + ' · ' + source.rows.length + ' 場 · ' + source.scope,
+      el('br'), source.fetchedAt ? '最後成功取得 ' + new Date(source.fetchedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false }) + ' · '
+        : source.attemptedAt ? '最近檢查 ' + new Date(source.attemptedAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', hour12: false }) + '（尚未取得場次） · ' : '', link('官方', source.url, true));
     return p;
   }));
-  $('source-summary').textContent = '來源與收錄範圍：' + data.screenings.sources.filter(s => sourceState(s) === 'current').length + ' 檔可核對，非完整影展清單';
+  $('source-summary').textContent = '來源與收錄範圍：' + sources.filter(s => sourceState(s) === 'current').length + ' 個來源可核對，非完整影展清單';
   $('legend').textContent = isFestival ? '色帶是影展期間，不代表每天都有放映。點日期看檔期。' : browse ? '數字是符合篩選的影展場次，點日期逐場挑選。收藏後到「我的場次」排片。' : '數字是你收藏的院線與影展場次，點日期看完整清單。';
   $('month-title').textContent = Number(state.month.slice(0, 4)) + ' 年 ' + Number(state.month.slice(5)) + ' 月';
   $('month').value = state.month;
@@ -183,7 +191,7 @@ function render() {
     const sessions = displayedSessions.filter(s => s.day === day);
     const b = button('', () => {
       if (!monthValid(day.slice(0, 7))) return;
-      state.day = day; state.month = day.slice(0, 7); render();
+      state.day = day; state.month = day.slice(0, 7); state.dayLimit = 6; render();
       document.querySelector('[data-day="' + day + '"]')?.focus({ preventScroll: true });
     });
     b.className = 'day' + (day.startsWith(state.month) ? '' : ' outside') + (day === currentDay ? ' today' : '');
@@ -201,7 +209,14 @@ function render() {
   $('day-title').textContent = state.day.replaceAll('-', ' / ');
   const daily = isFestival ? visibleFestivals.filter(f => inPeriod(state.day, f)) : displayedSessions.filter(s => s.day === state.day);
   const cardFor = s => isFestival ? festivalCard(s) : sessionCard(s, browse);
-  $('day-items').replaceChildren(...daily.map(cardFor));
+  // A cached pre-XR HTML page can load newer JS; missing optional controls must
+  // not break its existing calendar or hide rows without a way to expand them.
+  const dayMore = $('day-more');
+  $('day-items').replaceChildren(...(browse && dayMore ? daily.slice(0, state.dayLimit) : daily).map(cardFor));
+  if (dayMore) {
+    dayMore.hidden = !browse || daily.length <= state.dayLimit;
+    dayMore.textContent = '再顯示 6 場（目前 ' + Math.min(state.dayLimit, daily.length) + '／' + daily.length + '）';
+  }
   if (!daily.length) $('day-items').append(el('p', 'empty', isFestival ? '這一天沒有符合條件的已收錄影展，不代表沒有活動。' : browse ? '這一天沒有符合篩選的已收錄場次。試試其他日期，或往下看本月清單；不代表官方沒有場次。' : '這一天尚未收藏指定場次；可到「影展場次」或回主站挑選。'));
   $('list-title').textContent = (isFestival ? '本月影展' : browse ? '本月影展場次' : '本月收藏場次') + ' · ' + monthItems.length;
   $('month-items').replaceChildren(...(browse ? monthItems.slice(0, state.limit) : monthItems).map(cardFor));
@@ -246,21 +261,22 @@ async function init() {
   data = await response.json(); validateFestivals(data);
   if (!Number.isFinite(Date.parse(data.generatedAt))) throw new Error('missing build timestamp');
   index = scheduleIndex(data.schedule);
-  try { validateScreeningFeed(data.screenings, data.festivals); }
-  catch { data.screenings = emptyScreeningFeed(data.festivals); }
+  data.screenings = recoverScreeningFeed(data.screenings, data.festivals);
   const cities = [...new Set(data.festivals.flatMap(f => f.cities))].sort((a, b) => ['台北市', '新北市', '台中市', '台南市', '高雄市'].indexOf(a) - ['台北市', '新北市', '台中市', '台南市', '高雄市'].indexOf(b));
   for (const city of cities) { const option = el('option', '', city); option.value = city; $('city').append(option); }
   for (const f of data.festivals) { const option = el('option', '', f.shortName); option.value = f.id; $('festival-select').append(option); }
-  for (const mode of ['screenings', 'festivals', 'saved']) $('mode-' + mode).addEventListener('click', () => { state.mode = mode; state.limit = 40; render(); });
-  for (const [name, delta] of [['prev', -1], ['next', 1]]) $(name).addEventListener('click', () => { state.month = shiftMonth(state.month, delta); state.day = state.month + '-01'; render(); });
-  $('today').addEventListener('click', () => { state.day = taipeiDate(); state.month = state.day.slice(0, 7); render(); });
-  $('month').addEventListener('change', e => { if (monthValid(e.target.value)) { state.month = e.target.value; state.day = state.month + '-01'; render(); } });
+  for (const mode of ['screenings', 'festivals', 'saved']) $('mode-' + mode).addEventListener('click', () => { state.mode = mode; state.limit = 40; state.dayLimit = 6; render(); });
+  for (const [name, delta] of [['prev', -1], ['next', 1]]) $(name).addEventListener('click', () => { state.month = shiftMonth(state.month, delta); state.day = state.month + '-01'; state.dayLimit = 6; render(); });
+  $('today').addEventListener('click', () => { state.day = taipeiDate(); state.month = state.day.slice(0, 7); state.dayLimit = 6; render(); });
+  $('month').addEventListener('change', e => { if (monthValid(e.target.value)) { state.month = e.target.value; state.day = state.month + '-01'; state.dayLimit = 6; render(); } });
   $('city').addEventListener('change', e => { state.city = e.target.value; render(); });
   $('followed-only').addEventListener('change', e => { state.followedOnly = e.target.checked; render(); });
   $('buffer').addEventListener('change', e => { state.buffer = Number(e.target.value); render(); });
-  $('festival-select').addEventListener('change', e => { state.festival = e.target.value; state.limit = 40; render(); });
-  $('film-search').addEventListener('input', e => { state.query = e.target.value; state.limit = 40; render(); });
-  $('upcoming-only').addEventListener('change', e => { state.upcoming = e.target.checked; state.limit = 40; render(); });
+  $('festival-select').addEventListener('change', e => { state.festival = e.target.value; state.limit = 40; state.dayLimit = 6; render(); });
+  $('screening-kind')?.addEventListener('change', e => { state.format = e.target.value; state.limit = 40; state.dayLimit = 6; render(); });
+  $('film-search').addEventListener('input', e => { state.query = e.target.value; state.limit = 40; state.dayLimit = 6; render(); });
+  $('upcoming-only').addEventListener('change', e => { state.upcoming = e.target.checked; state.limit = 40; state.dayLimit = 6; render(); });
+  $('day-more')?.addEventListener('click', () => { state.dayLimit += 6; render(); });
   $('show-more').addEventListener('click', () => { state.limit += 40; render(); });
   $('export').addEventListener('click', download);
   window.addEventListener('storage', e => { if (!e.key || [SCREENINGS_KEY, FOLLOW_KEY, 'kaiyan.sessions', 'kaiyan.favorites'].includes(e.key)) render(); });

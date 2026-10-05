@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTIAF, parseWMW, parseKFFDay, refreshScreeningFeed, editionDays } from '../lib/festival-sources.mjs';
+import { parseTIAF, parseWMW, parseKFFDay, refreshScreeningFeed, editionDays, inspectGoldenHorseAvailability, FestivalNotReady } from '../lib/festival-sources.mjs';
 import { SCREENINGS_KEY, validateScreeningFeed, validateScreening, sourceState, readFestivalSessions, saveFestivalSession,
-  removeFestivalSession, availableScreenings, resolveFestivalSessions, matchesScreening } from '../lib/festival-screenings.mjs';
+  removeFestivalSession, availableScreenings, resolveFestivalSessions, matchesScreening, recoverScreeningFeed, screeningSources, KFF_XR_SOURCE } from '../lib/festival-screenings.mjs';
 import { conflicts, exportCalendar } from '../lib/festival-calendar.mjs';
 import { now } from './festival-fixture.mjs';
-import { screeningFixture, parserFestival, tiafHTML, wmwHTML, wmwScript, wmwEvent, kffJSON } from './festival-screenings-fixture.mjs';
+import { screeningFixture, parserFestival, tiafHTML, wmwHTML, wmwScript, wmwEvent, kffJSON, kffXRJSON, xrFixture, goldenNoData } from './festival-screenings-fixture.mjs';
 const storage = initial => {
   const map = new Map(Object.entries(initial || {}));
   return { getItem: k => map.has(k) ? map.get(k) : null, setItem: (k, v) => map.set(k, v), map };
@@ -154,4 +154,126 @@ test('removed source adapter cannot leave last-good data looking freshly verifie
   const next = await refreshScreeningFeed({ festivals: catalog.festivals, previous: feed, loaders: {}, now: () => now });
   assert.equal(next.sources[0].status, 'unsupported'); assert.equal(next.sources[0].fetchedAt, feed.sources[0].fetchedAt);
   assert.equal(availableScreenings(next, catalog.festivals, {}, now)[0].state, 'missing');
+});
+
+test('XR expands only explicit child slots with stable separate IDs, official ends and scoped notes', () => {
+  const data = kffXRJSON(), marks = new Map([['1', '影人出席']]);
+  const rows = parseKFFDay(data, parserFestival, '2026-10-09', marks, '109');
+  assert.deepEqual(rows.map(r => r.id), ['fixture-2026:xr:100', 'fixture-2026:xr:101']);
+  assert.deepEqual(rows.map(r => [r.mins, r.endMins, r.runtime]), [[660, 700, 12], [720, 760, 12]]);
+  assert.equal(rows[0].endKind, 'official'); assert.equal(rows[0].films.length, 2);
+  assert.ok(rows[1].notes.includes('英文發音、中文字幕'));
+  assert.ok(rows[1].notes.some(n => n.startsWith('官網節目欄備註（請依本場確認）：')));
+  assert.ok(rows.every(r => r.notes.includes('XR 體驗') && r.notes.includes('影人出席') && r.url.endsWith('cate=109')));
+  assert.doesNotMatch(JSON.stringify(rows), /brief|synopses|_detail|showtime_row/);
+  assert.equal(parseKFFDay(kffJSON(), parserFestival, '2026-10-09')[0].id, 'fixture-2026:100');
+  const group = data[109][0].cinemas[0].auditoriums[0].programs[0];
+  group.showtime_row[1].start_time = '12:10';
+  assert.equal(parseKFFDay(data, parserFestival, '2026-10-09', marks, '109')[1].id, rows[1].id);
+});
+test('XR refuses missing/duplicate slots, mixed categories/programs, wrong date/hall/edition', () => {
+  for (const mutate of [g => delete g.showtime_row, g => g.showtime_row = [], g => g.id = 999,
+    g => g.cate = 108, g => g.cinema = 99, g => g.date = '2026-10-10',
+    g => g.showtime_row.push(structuredClone(g.showtime_row[0])),
+    g => g.showtime_row[1].cate = 108, g => g.showtime_row[1].cinema = 99,
+    g => g.showtime_row[1].date = '2026-10-10', g => g.showtime_row[1].belong = 99,
+    g => g.showtime_row[1].belong_program.cate = 108,
+    g => g.showtime_row[1].belong_program.film_row[0].year = '2025',
+    g => { g.showtime_row[1].belong = 99; g.showtime_row[1].belong_program.id = 99; }]) {
+    const data = kffXRJSON(); mutate(data[109][0].cinemas[0].auditoriums[0].programs[0]);
+    assert.throws(() => parseKFFDay(data, parserFestival, '2026-10-09', new Map(), '109'));
+  }
+  assert.throws(() => parseKFFDay(kffXRJSON(), parserFestival, '2026-10-09'));
+  assert.throws(() => parseKFFDay(kffJSON(), parserFestival, '2026-10-09', new Map(), '109'));
+  assert.deepEqual(parseKFFDay({ 109: [{ date: '2026-10-09', cinemas: [] }] }, parserFestival, '2026-10-09', new Map(), '109'), []);
+});
+test('XR is a backward-compatible extra source; corrupt extensions do not erase original feeds', () => {
+  const { feed, catalog } = xrFixture();
+  validateScreeningFeed(feed, catalog.festivals);
+  const legacy = structuredClone(feed); delete legacy.extraSources;
+  validateScreeningFeed(legacy, catalog.festivals);
+  let recovered = recoverScreeningFeed(legacy, catalog.festivals);
+  assert.equal(recovered.extraSources[0].status, 'not-fetched');
+  assert.equal(recovered.sources.find(s => s.festivalId === 'kff-2026').rows.length, 1);
+  for (const mutate of [f => f.extraSources = {}, f => f.extraSources[0].rows[0].date = '1900-01-01',
+    f => f.extraSources.push(f.extraSources[0]), f => f.extraSources[0].rows.push(f.sources[1].rows[0])]) {
+    const copy = structuredClone(feed); mutate(copy); assert.throws(() => validateScreeningFeed(copy, catalog.festivals));
+    recovered = recoverScreeningFeed(copy, catalog.festivals);
+    assert.equal(recovered.extraSources[0].status, 'failed'); assert.equal(recovered.extraSources[0].rows.length, 0);
+    assert.deepEqual(recovered.sources.find(s => s.festivalId === 'kff-2026'), feed.sources[1]);
+  }
+  for (const mutate of [f => f.sources.push(f.extraSources[0]), f => f.sources[1].rows.push(f.extraSources[0].rows[0]),
+    f => f.extraSources[0].sourceId = 'unreviewed:xr']) {
+    const copy = structuredClone(feed); mutate(copy); assert.throws(() => validateScreeningFeed(copy, catalog.festivals));
+  }
+});
+test('KFF XR and long/short independently retain last-good rows/times on partial, empty or drop failures', async () => {
+  const { feed, catalog } = xrFixture();
+  const fail = async () => { throw new Error('one XR day incomplete'); };
+  for (const xrLoader of [fail, async () => [], async () => feed.extraSources[0].rows.slice(0, 1),
+    async () => [feed.sources[1].rows[0], { ...feed.sources[1].rows[0], id: 'kff-2026:101' }]]) {
+    const next = await refreshScreeningFeed({ festivals: catalog.festivals, previous: feed, now: () => now + 60000,
+      loaders: { 'kff-2026': async () => feed.sources[1].rows, [KFF_XR_SOURCE]: xrLoader } });
+    assert.equal(next.sources.find(s => s.festivalId === 'kff-2026').status, 'ok');
+    const xr = next.extraSources[0]; assert.equal(xr.status, 'failed'); assert.deepEqual(xr.rows, feed.extraSources[0].rows);
+    assert.equal(xr.fetchedAt, feed.extraSources[0].fetchedAt); assert.notEqual(xr.attemptedAt, xr.fetchedAt);
+    const resolved = resolveFestivalSessions([feed.sources[1].rows[0], ...xr.rows], next, catalog.festivals, {}, now + 60000);
+    assert.equal(resolved.find(s => s.format === 'screening').state, 'current');
+    assert.ok(resolved.filter(s => s.format === 'xr').every(s => s.state === 'unverified' && s.end === null));
+  }
+  const next = await refreshScreeningFeed({ festivals: catalog.festivals, previous: feed, now: () => now + 60000,
+    loaders: { 'kff-2026': fail, [KFF_XR_SOURCE]: async () => feed.extraSources[0].rows } });
+  assert.equal(next.sources.find(s => s.festivalId === 'kff-2026').status, 'failed'); assert.equal(next.extraSources[0].status, 'ok');
+  assert.equal(next.extraSources[0].fetchedAt, new Date(now + 60000).toISOString());
+});
+test('XR favorites keep the existing key/row schema and export one official slot, not each member film', async () => {
+  const { feed, catalog, xr, regular } = xrFixture(), { row } = screeningFixture();
+  const store = storage({ [SCREENINGS_KEY]: JSON.stringify([row, regular]), 'kaiyan.sessions': 'original', 'kaiyan.favorites': 'keep' });
+  saveFestivalSession(store, xr);
+  const saved = readFestivalSessions(store);
+  assert.deepEqual(saved.slice(0, 2), [row, regular]); assert.deepEqual(Object.keys(saved[2]).sort(), Object.keys(row).sort());
+  assert.equal(store.getItem('kaiyan.sessions'), 'original'); assert.equal(store.getItem('kaiyan.favorites'), 'keep');
+  const sessions = resolveFestivalSessions([xr], feed, catalog.festivals, {}, now);
+  assert.equal(sessions[0].format, 'xr'); assert.equal(sessions[0].state, 'current');
+  const ics = await exportCalendar({ sessions, now });
+  assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length, 1);
+  assert.match(ics, /DTSTART:20990101T050000Z/); assert.match(ics, /DTEND:20990101T054000Z/);
+  const again = await exportCalendar({ sessions, now: now + 10000 });
+  assert.equal(ics.match(/UID:(.+)/)[1], again.match(/UID:(.+)/)[1]);
+  const legacy = structuredClone(feed); delete legacy.extraSources;
+  assert.equal(resolveFestivalSessions([xr], legacy, catalog.festivals, {}, now)[0].state, 'missing');
+  assert.deepEqual(readFestivalSessions(store), saved, 'missing optional extension never changes saved snapshots');
+});
+test('corrupt unrelated cached sources cannot bypass valid last-good XR recovery during refresh', async () => {
+  const { feed, catalog } = xrFixture();
+  feed.sources.unshift(null);
+  const next = await refreshScreeningFeed({ festivals: catalog.festivals, previous: feed, now: () => now + 1000,
+    loaders: { [KFF_XR_SOURCE]: async () => { throw new Error('temporary network error'); } } });
+  assert.equal(next.extraSources[0].status, 'failed'); assert.deepEqual(next.extraSources[0].rows, feed.extraSources[0].rows);
+  assert.equal(next.extraSources[0].fetchedAt, feed.extraSources[0].fetchedAt);
+});
+test('Golden Horse recognizes only the verified no-data stub, never a changed, historical or error page', () => {
+  assert.throws(() => inspectGoldenHorseAvailability(goldenNoData), FestivalNotReady);
+  for (const html of ['', '<html>503 unavailable</html>', '<html>2026 經典影展 08/01 17:00</html>',
+    goldenNoData.replace('目前無相關資料', '系統錯誤'), goldenNoData.replace('<noscript>', '').replace('</noscript>', '').replace('fancyAlert(', 'other('),
+    goldenNoData + '<main>2026 影展場次</main>', goldenNoData.replace('<noscript>', '<noscript><a href="/film">新增節目</a>')]) {
+    assert.throws(() => inspectGoldenHorseAvailability(html), e => !(e instanceof FestivalNotReady));
+  }
+});
+test('Golden Horse pending differs from failure, expires, and never clears existing last-good screenings', async () => {
+  const { feed, catalog, regular } = xrFixture(), events = [];
+  const loaders = { 'golden-horse-2026': async () => inspectGoldenHorseAvailability(goldenNoData) };
+  const next = await refreshScreeningFeed({ festivals: catalog.festivals, previous: feed, now: () => now, loaders,
+    onSource: (id, status) => events.push([id, status]) });
+  const g = next.sources.find(s => s.festivalId === 'golden-horse-2026');
+  assert.deepEqual(events, [['golden-horse-2026', 'pending']]); assert.deepEqual(g.rows, []); assert.equal(g.fetchedAt, null);
+  assert.equal(sourceState(g, now), 'pending'); assert.equal(sourceState(g, now + 73 * 3600000), 'stale');
+  assert.equal(sourceState(g, now - 3600000), 'stale');
+  const before = feed.sources.find(s => s.festivalId === 'golden-horse-2026');
+  Object.assign(before, { status: 'ok', fetchedAt: new Date(now).toISOString(),
+    rows: [{ ...regular, festivalId: before.festivalId, id: before.festivalId + ':verified-old' }] });
+  const failed = await refreshScreeningFeed({ festivals: catalog.festivals, previous: feed, now: () => now + 1000, loaders });
+  const after = failed.sources.find(s => s.festivalId === before.festivalId);
+  assert.equal(after.status, 'failed'); assert.deepEqual(after.rows, before.rows); assert.equal(after.fetchedAt, before.fetchedAt);
+  assert.equal(screeningSources(failed).length, catalog.festivals.length + 1);
 });

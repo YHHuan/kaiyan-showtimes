@@ -8,8 +8,8 @@
   <title>影展日曆・我的觀影計畫｜開演</title>
   <meta name="description" content="把已核實的影展檔期與你收藏的電影場次放進月曆。免帳號、只存本機；節目及購票以官方公告為準。">
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css">
-  <script type="module" src="./app.mjs"></script>
+  <link rel="stylesheet" href="./style.css?v=xr1">
+  <script type="module" src="./app.mjs?v=xr1"></script>
 </head>
 <body>
   <a class="skip" href="#day-agenda">跳到當日清單</a>
@@ -35,6 +35,7 @@
         <p id="mode-note" class="muted"></p>
         <div class="filters" id="screening-filters">
           <label>影展 <select id="festival-select"><option value="all">全部收錄影展</option></select></label>
+          <label>類型 <select id="screening-kind"><option value="all">全部類型</option><option value="screening">電影放映</option><option value="xr">XR 體驗</option></select></label>
           <label class="search">找片 <input id="film-search" type="search" maxlength="200" placeholder="片名、英文片名或已收錄合輯短片"></label>
           <label class="check"><input type="checkbox" id="upcoming-only" checked>只看未開演</label>
         </div>
@@ -65,6 +66,7 @@
           <section id="day-agenda" class="agenda" tabindex="-1" aria-labelledby="day-title">
             <p class="eyebrow">這一天</p><h2 id="day-title"></h2>
             <div id="day-items"></div>
+            <button id="day-more" type="button" hidden>再顯示 6 場</button>
           </section>
         </div>
         <section class="month-list" aria-labelledby="list-title">
