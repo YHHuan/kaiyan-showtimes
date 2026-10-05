@@ -52,6 +52,7 @@ try {
   }, original);
   const open = async (view = 'screenings') => { await page.goto(base + '/festivals/?view=' + view); await page.locator('#app').waitFor({ state: 'visible' }); };
   await open();
+  assert.equal(await page.evaluate(async () => typeof (await import('./model.mjs')).resolveSaved), 'function', 'previous release module URL remains compatible');
   assert.equal(await page.locator('#mode-screenings').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.locator('#month-items .item').count(), 2);
   assert.equal(await page.locator('#export').isVisible(), false, 'never exports the whole screening timetable');

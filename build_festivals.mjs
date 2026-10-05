@@ -34,6 +34,8 @@ export async function buildFestivalCalendar({ root, payload, enabled = true }) {
   await mkdir(out, { recursive: true });
   await writeFile(join(out, 'data.json'), JSON.stringify(data));
   for (const file of ['festival-calendar.mjs', 'festival-screenings.mjs']) await copyFile(join(root, 'lib', file), join(out, file));
+  // Keep the first release's module URL working for already-open/cached pages.
+  await writeFile(join(out, 'model.mjs'), "export * from './festival-calendar.mjs';\n");
   for (const file of ['app.mjs', 'style.css', 'index.html']) await copyFile(join(root, 'web/festivals', file), join(out, file));
   return { festivals: catalog.festivals.length, screenings: screenings.sources.reduce((n, s) => n + s.rows.length, 0) };
 }
