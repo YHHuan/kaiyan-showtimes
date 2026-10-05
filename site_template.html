@@ -104,7 +104,8 @@
   .home-link { color: inherit; text-decoration: none; display: inline-flex; align-items: baseline; min-height: 44px; gap: 8px; }
   .home-link:hover { color: var(--red); }
   .home-label { font: 12px system-ui, sans-serif; letter-spacing: 0; color: var(--ink2); }
-  .header-actions { margin-left: auto; }
+  .header-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .festival-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink2); font-size: 12px; text-underline-offset: 3px; }
   .header-actions button { min-height: 44px; white-space: nowrap; }
   .brand .sub { flex: 1 1 210px; }
   .sub { color: var(--ink2); font-size: 13px; }
@@ -538,7 +539,7 @@
     <div class="brand">
       <h1><a class="home-link" id="home" href="./" aria-label="開演首頁，重設查詢條件"><span>開演<span class="dot">.</span></span><span class="home-label">首頁</span></a></h1>
       <span class="sub">跨影城、地方戲院，一搜就到</span>
-      <nav class="header-actions" aria-label="個人收藏"><button class="toggle" id="my-favorites" aria-pressed="false">☆ 我的收藏</button></nav>
+      <nav class="header-actions" aria-label="收藏與附加功能"><a class="festival-link" href="./festivals/">影展日曆</a><button class="toggle" id="my-favorites" aria-pressed="false">☆ 我的收藏</button></nav>
     </div>
     <div class="stats">全台 <b>__NCINEMA__</b> 家影城・<b>__NMOVIE__</b> 部電影・場次至 <b>__LASTDATE__</b></div>
   </header>

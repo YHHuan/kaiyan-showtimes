@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+  <title>影展日曆・我的觀影計畫｜開演</title>
+  <meta name="description" content="把已核實的影展檔期與你收藏的電影場次放進月曆。免帳號、只存本機；節目及購票以官方公告為準。">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <a class="skip" href="#day-agenda">跳到當日清單</a>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="../">開演<span>.</span></a>
+      <nav aria-label="主要導覽"><a href="../">查電影場次</a><a href="../?saved=1">管理我的收藏</a></nav>
+    </header>
+    <main>
+      <section class="intro" aria-labelledby="title">
+        <p class="eyebrow">多留一天，給喜歡的電影</p>
+        <h1 id="title">影展日曆<span class="edition">附加功能・試行版</span></h1>
+        <p>先看哪裡有影展，再替想看的場次留個位置。</p>
+      </section>
+      <p id="load-error" class="notice" role="status">正在讀取日曆；原本的場次查詢不受影響。</p>
+      <noscript><p class="notice">月曆需要 JavaScript；你仍可<a href="../">返回場次查詢</a>。</p></noscript>
+      <div id="app" hidden>
+        <div class="mode-tabs" role="group" aria-label="日曆內容">
+          <button type="button" id="mode-festivals" aria-pressed="true">影展檔期</button>
+          <button type="button" id="mode-saved" aria-pressed="false">我的場次</button>
+        </div>
+        <p id="mode-note" class="muted"></p>
+        <div class="filters" id="festival-filters">
+          <label>地區 <select id="city"><option value="all">全部地區</option></select></label>
+          <label class="check"><input type="checkbox" id="followed-only">只看我關注的影展</label>
+        </div>
+        <div class="filters" id="saved-filters" hidden>
+          <label>跨戲院轉場預留 <select id="buffer"><option value="0">不另預留</option><option value="15" selected>15 分鐘</option><option value="30">30 分鐘</option><option value="60">60 分鐘</option></select></label>
+          <a href="../?saved=1">新增／取消場次請到我的收藏 →</a>
+        </div>
+        <p id="storage-note" class="notice" role="status" hidden></p>
+        <p id="data-note" class="notice" hidden></p>
+        <div class="month-nav">
+          <button type="button" id="prev" aria-label="上一個月">←</button>
+          <h2 id="month-title"></h2>
+          <button type="button" id="next" aria-label="下一個月">→</button>
+          <button type="button" id="today">今天</button>
+          <label class="jump">跳至 <input type="month" id="month" min="1900-01" max="2199-12" aria-label="跳至月份"></label>
+        </div>
+        <div class="calendar-layout">
+          <section class="calendar-panel" aria-label="月份日曆">
+            <div class="weekdays" aria-hidden="true"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+            <div id="calendar" class="calendar" role="group" aria-labelledby="month-title"></div>
+            <p class="muted legend">點日期看完整清單。色帶是影展期間，不代表每天都有放映；圓點與數字是你的收藏場次。</p>
+          </section>
+          <section id="day-agenda" class="agenda" tabindex="-1" aria-labelledby="day-title">
+            <p class="eyebrow">這一天</p><h2 id="day-title"></h2>
+            <div id="day-items"></div>
+          </section>
+        </div>
+        <section class="month-list" aria-labelledby="list-title">
+          <div class="list-heading"><h2 id="list-title"></h2><button id="export" type="button">匯出行事曆 .ics</button></div>
+          <p id="export-note" class="muted"></p>
+          <p id="conflict-note" class="notice" hidden></p>
+          <div id="month-items" class="cards"></div>
+        </section>
+        <p id="action-status" class="muted" role="status" aria-live="polite"></p>
+      </div>
+    </main>
+    <footer>
+      <p>不需註冊。關注影展與原有收藏只留在這台裝置、這個瀏覽器；換裝置不會同步，清除網站資料可能遺失。</p>
+      <p>這裡不售票，也不判定套票適用範圍。場次異動、票種與購票請以各影展官方公告為準；匯出的行事曆不會自動同步後續異動。</p>
+      <p><a href="../">← 回到開演查場次</a></p>
+    </footer>
+  </div>
+</body>
+</html>

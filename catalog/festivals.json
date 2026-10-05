@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "festivals": [
+    {
+      "id": "tiaf-2026",
+      "name": "2026 臺中國際動畫影展",
+      "shortName": "台中動畫",
+      "startDate": "2026-10-03",
+      "endDate": "2026-10-10",
+      "cities": ["台中市"],
+      "url": "https://twtiaf.com/2026/index.php",
+      "programUrl": "https://twtiaf.com/2026/schedule_list.php?cate=0",
+      "sourceUrl": "https://twtiaf.com/2026/about.php?cate=0&id=1",
+      "checkedAt": "2026-10-05"
+    },
+    {
+      "id": "kff-2026",
+      "name": "2026 高雄電影節",
+      "shortName": "高雄電影節",
+      "startDate": "2026-10-09",
+      "endDate": "2026-10-26",
+      "cities": ["高雄市"],
+      "url": "https://www.kff.tw/",
+      "programUrl": "https://www.kff.tw/schedule",
+      "sourceUrl": "https://www.kff.tw/content/2026kff-news018",
+      "checkedAt": "2026-10-05"
+    },
+    {
+      "id": "wmw-2026",
+      "name": "2026 台灣國際女性影展",
+      "shortName": "女性影展",
+      "startDate": "2026-10-16",
+      "endDate": "2026-10-25",
+      "cities": ["台北市"],
+      "url": "https://www.wmw.org.tw/",
+      "programUrl": "https://www.wmw.org.tw/tw/category/9",
+      "sourceUrl": "https://www.wmw.org.tw/tw/title/1097",
+      "checkedAt": "2026-10-05",
+      "seriesId": "wmw2026-spot"
+    },
+    {
+      "id": "golden-horse-2026",
+      "name": "2026 台北金馬影展",
+      "shortName": "金馬影展",
+      "startDate": "2026-11-06",
+      "endDate": "2026-11-22",
+      "cities": ["台北市"],
+      "url": "https://goldenhorse.org.tw/",
+      "programUrl": "https://goldenhorse.org.tw/",
+      "sourceUrl": "https://goldenhorse.org.tw/news/detail/2495",
+      "checkedAt": "2026-10-05"
+    }
+  ]
+}

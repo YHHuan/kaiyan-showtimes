@@ -648,6 +648,21 @@ const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://w
   .map((p) => `  <url><loc>${esc(`${SITE_URL}/${p}`)}</loc><lastmod>${todayTPE}</lastmod></url>`).join('\n')}\n</urlset>\n`;
 await writeFile(`${root}out/sitemap.xml`, sitemap);
 await writeFile(`${root}out/robots.txt`, `User-agent: *\nAllow: /\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+
+// 影展日曆只讀已完成的 payload；附加資料／程式失敗不能阻止一般場次建站。
+try {
+  const { buildFestivalCalendar } = await import('./build_festivals.mjs');
+  const calendar = await buildFestivalCalendar({ root, payload, enabled: process.env.FESTIVAL_CALENDAR_ENABLED !== '0' });
+  console.log(`  影展日曆：${calendar.festivals} 檔人工核對檔期（不新增場次）`);
+} catch (error) {
+  console.warn('  影展日曆不可用，一般場次保留：' + error.message);
+  // 覆蓋舊入口，不能留下上一次成功建置的日曆假裝是本輪資料。
+  try {
+    await mkdir(`${root}out/festivals`, { recursive: true });
+    await writeFile(`${root}out/festivals/index.html`, '<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>影展日曆暫時不可用｜開演</title><h1>影展日曆暫時不可用</h1><p>原本的場次查詢及收藏未受影響。</p><a href="../">返回開演查場次</a></html>');
+    await writeFile(`${root}out/festivals/data.json`, JSON.stringify({ version: 1, status: 'unavailable' }));
+  } catch (fallbackError) { console.warn('  無法寫入附加頁退路：' + fallbackError.message); }
+}
 console.log(
   `\nout/index.html: ${sessionCount} 場次 / ${cinemas.list.length} 影城 / ${movies.list.length} 部片` +
     `（${mergedTitles} 部跨影城異名合併、${eventFolded} 個特別場歸戶、海報 ${withPoster}、簡介 ${withSyn}、導演 ${withDirector}、演員 ${withCast}、座標 ${withGeo}）` +
