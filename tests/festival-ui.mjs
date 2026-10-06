@@ -8,7 +8,7 @@ import { chromium } from 'playwright';
 import { buildFestivalCalendar } from '../build_festivals.mjs';
 import { FOLLOW_KEY } from '../lib/festival-calendar.mjs';
 import { festivalFixture, now } from './festival-fixture.mjs';
-import { screeningFixture } from './festival-screenings-fixture.mjs';
+import { screeningFixture, xrFixture } from './festival-screenings-fixture.mjs';
 
 const { catalog, data, saved, tuples } = festivalFixture();
 const scratch = await mkdtemp(join(tmpdir(), 'kaiyan-festival-ui-'));
@@ -40,6 +40,12 @@ try {
   assert.match(build(true).log, /影展日曆：3 檔/);
   assert.deepEqual(await corePayload(), baseline, 'optional calendar never changes any core DATA field');
   assert.equal(JSON.parse(await readFile(join(scratch, 'out/festivals/data.json'), 'utf8')).screenings.sources[0].rows.length, 2, 'nested feed only enters optional output');
+  const xr = xrFixture();
+  await writeFile(join(scratch, 'catalog/festivals.json'), JSON.stringify(xr.catalog));
+  await writeFile(join(scratch, 'data/festivals/screenings.json'), JSON.stringify(xr.feed));
+  build(true); assert.deepEqual(await corePayload(), baseline, 'XR extension never enters ordinary source counts or any core DATA field');
+  assert.equal(JSON.parse(await readFile(join(scratch, 'out/festivals/data.json'), 'utf8')).screenings.extraSources[0].rows.length, 2);
+  await writeFile(join(scratch, 'catalog/festivals.json'), JSON.stringify(catalog));
   await writeFile(join(scratch, 'data/festivals/screenings.json'), '{broken');
   build(true); assert.deepEqual(await corePayload(), baseline, 'broken nested feed never changes core DATA');
   await rm(join(scratch, 'data/festivals/screenings.json'));

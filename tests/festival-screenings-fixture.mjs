@@ -36,3 +36,34 @@ export function kffJSON() {
       belong_program: { id: 10, cate: 108, status: 1, title: '晨光＋星空', title_en: 'Two Shorts', time_length: '60',
         film_row: [{ id: 11, year: '2026', title: '晨光', brief: 'Do not publish source synopses' }, { id: 12, year: '2026', title: '星空' }] } }] }] }] }] };
 }
+
+export function kffXRJSON() {
+  const days = kffJSON()[108], hall = days[0].cinemas[0].auditoriums[0], first = hall.programs[0];
+  first.cate = 109; first.belong_program.cate = 109;
+  first.start_time = '11:00'; first.end_time = '11:40';
+  first.belong_program.time_length = '12'; // Film duration is not the booked slot.
+  first.notes = '本節目需線上預約，每場 8 位';
+  const second = structuredClone(first);
+  Object.assign(second, { id: 101, start_time: '12:00', end_time: '12:40', notes: '英文發音、中文字幕' });
+  hall.programs = [{ ...first, showtime_row: [first, second] }];
+  return { 109: days };
+}
+
+// Future clock keeps UI tests deterministic. Production IDs are intentionally
+// reused here to exercise category routing, not to claim a real 2099 edition.
+export function xrFixture() {
+  const { catalog, source, row } = screeningFixture();
+  catalog.festivals.push({ ...catalog.festivals[0], id: 'kff-2026', name: '測試雄影', shortName: '測試雄影', cities: ['高雄市'] },
+    { ...catalog.festivals[0], id: 'golden-horse-2026', name: '測試金馬', shortName: '測試金馬' });
+  const regular = { ...row, id: 'kff-2026:100', festivalId: 'kff-2026', movie: '長片測試' };
+  const xr = { ...regular, id: 'kff-2026:xr:100', movie: 'XR 測試體驗', englishTitle: 'XR Experience',
+    mins: 780, endMins: 820, runtime: 12, notes: ['XR 體驗', '英文發音、中文字幕'] };
+  const xrSecond = { ...xr, id: 'kff-2026:xr:101', mins: 900, endMins: 940 };
+  const xrSource = { ...source, sourceId: 'kff-2026:xr', festivalId: 'kff-2026', rows: [xr, xrSecond] };
+  const feed = { version: 1, sources: [source, { ...source, festivalId: 'kff-2026', rows: [regular] },
+    { ...source, festivalId: 'golden-horse-2026', status: 'not-fetched', fetchedAt: null, rows: [] }], extraSources: [xrSource] };
+  return { catalog, regular, xr, xrSecond, xrSource, feed };
+}
+
+export const goldenNoData = `<script>$(document).ready(function(){fancyAlert('目前無相關資料', function(){document.location.href=('https://www.goldenhorse.org.tw');});});</script>
+<noscript><a href='https://www.goldenhorse.org.tw'>未自動轉跳，請按這裡。</a></noscript>`;
