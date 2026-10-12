@@ -17,6 +17,6 @@
     "playwright": "^1.60.0"
   },
   "dependencies": {
-    "parse5": "8.0.0"
+    "parse5": "8.0.1"
   }
 }
