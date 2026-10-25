@@ -1,7 +1,7 @@
 import { validateFestivals, validDate, monthValid, shiftMonth, monthDays, taipeiDate, inPeriod, reviewOld,
   readFollows, toggleFollow, readSavedSessions, scheduleIndex, resolveSaved, conflicts, exportCalendar, FOLLOW_KEY } from './festival-calendar.mjs';
 import { SCREENINGS_KEY, recoverScreeningFeed, availableScreenings, resolveFestivalSessions, screeningSources,
-  readFestivalSessions, saveFestivalSession, removeFestivalSession, screeningSignature, sourceState, matchesScreening } from './festival-screenings.mjs?v=xr1';
+  readFestivalSessions, saveFestivalSession, removeFestivalSession, screeningSignature, sourceState, matchesScreening } from './festival-screenings.mjs?v=gh1';
 
 const $ = id => document.getElementById(id);
 const el = (tag, className = '', value) => {

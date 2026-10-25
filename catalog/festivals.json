@@ -44,11 +44,11 @@
       "shortName": "金馬影展",
       "startDate": "2026-11-06",
       "endDate": "2026-11-22",
-      "cities": ["台北市"],
+      "cities": ["台北市", "台中市", "高雄市"],
       "url": "https://goldenhorse.org.tw/",
       "programUrl": "https://www.goldenhorse.org.tw/film/programme/schedule/",
-      "sourceUrl": "https://goldenhorse.org.tw/news/detail/2495",
-      "checkedAt": "2026-10-05"
+      "sourceUrl": "https://www.goldenhorse.org.tw/film/programme/schedule/",
+      "checkedAt": "2026-10-25"
     }
   ]
 }
