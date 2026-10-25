@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { validateFestivals } from '../lib/festival-calendar.mjs';
 import { emptyScreeningFeed, recoverScreeningFeed, screeningSources, screeningSourceId, KFF_XR_SOURCE } from '../lib/festival-screenings.mjs';
-import { parseTIAF, parseWMW, kffPage, parseKFFDay, inspectGoldenHorseAvailability, editionDays, refreshScreeningFeed, FestivalSourceError } from '../lib/festival-sources.mjs';
+import { parseTIAF, parseWMW, kffPage, parseKFFDay, loadGoldenHorse, editionDays, refreshScreeningFeed, FestivalSourceError } from '../lib/festival-sources.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const args = process.argv.slice(2);
@@ -74,7 +74,10 @@ const loaders = {
   },
   'kff-2026': f => fetchKFF(f, '108'),
   [KFF_XR_SOURCE]: f => fetchKFF(f, '109'),
-  'golden-horse-2026': async f => inspectGoldenHorseAvailability((await request(f.programUrl)).body)
+  'golden-horse-2026': async f => {
+    const sourceDeadline = Date.now() + 60000;
+    return loadGoldenHorse(f, async url => { await delay(300); return (await request(url, {}, sourceDeadline)).body; });
+  }
 };
 const feed = await refreshScreeningFeed({ festivals, previous, loaders,
   onSource: (id, status, reason) => console.warn('[festivals] ' + id + ': ' + reason
