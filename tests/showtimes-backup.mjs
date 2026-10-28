@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
-import { CINEMAS, SHOWTIMES_BACKUP, fetchAtmovies } from '../fetch/atmovies.mjs';
+import { CINEMAS, SHOWTIMES_BACKUP, CENTURY_LUX_BACKUP, fetchAtmovies } from '../fetch/atmovies.mjs';
 import { cinemaCoverage, selectScheduleRows } from '../lib/cinema-coverage.mjs';
 import { markSourceFailed, saveRecords, todayISO } from '../lib/common.mjs';
 
@@ -45,8 +45,44 @@ test('秀泰 15 館加入正式抓取清單，已核實代碼／地區沿用官�
     assert.equal(CINEMAS[code], c);
     assert.equal(c.official, 'https://www.showtimes.com.tw/ticketing');
   }
-  assert.equal(Object.keys(CINEMAS).length, 51, '保留原本 36 館並加入 15 館');
-  assert.equal(new Set(Object.values(CINEMAS).map(c => c.name)).size, 51);
+  assert.equal(Object.keys(CINEMAS).length, 56, '保留原本 51 館並補回喜樂時代與樂聲 5 館');
+  assert.equal(new Set(Object.values(CINEMAS).map(c => c.name)).size, 56);
+});
+
+test('喜樂時代與樂聲使用已核對的開眼代碼，沿用官方館名避免收藏分裂', () => {
+  const expected = {
+    t02a09: ['喜樂時代影城 南港店', '台北市', 'a02'],
+    t02e17: ['喜樂時代影城 永和店', '新北市', 'a02'],
+    t02b06: ['喜樂時代影城 今日店', '台北市', 'a02'],
+    t07730: ['喜樂時代影城 高雄店', '高雄市', 'a07'],
+    t02b03: ['樂聲影城(西門町)', '台北市', 'a02'],
+  };
+  assert.deepEqual(Object.fromEntries(Object.entries(CENTURY_LUX_BACKUP)
+    .map(([code, c]) => [code, [c.name, c.area, c.region]])), expected);
+  for (const [code, c] of Object.entries(CENTURY_LUX_BACKUP)) assert.equal(CINEMAS[code], c);
+});
+
+test('一館售票站失敗造成官方整批過期時，五館備援接手；官方恢復仍逐館去重', async () => {
+  const requests = [];
+  const result = await fetchAtmovies({ targets: CENTURY_LUX_BACKUP, today: day,
+    timestamp: () => stamp, log: quiet, fetchPage: async url => {
+      requests.push(url); return page();
+    } });
+  assert.equal(requests.length, 5);
+  assert.equal(result.records.length, 5);
+  const source = c => c.name.startsWith('喜樂時代') ? 'centuryasia' : 'lux';
+  const official = Object.values(CENTURY_LUX_BACKUP).map(c => row(source(c), c.name, day, expired));
+  const status = { centuryasia: { fetchedAt: expired, cinemas: {} },
+    lux: { fetchedAt: expired, cinemas: {} }, atmovies: { fetchedAt: stamp, cinemas: result.cinemas } };
+  const coverage = cinemaCoverage([...official, ...result.records], status, day, now);
+  assert.equal(coverage.length, 5);
+  assert.ok(coverage.every(c => c.count === 1 && c.state === 'today-only'));
+  assert.ok(selectScheduleRows([...official, ...result.records], status, now).every(r => r.source === 'atmovies'));
+  const recovered = { ...official[0], fetchedAt: stamp, hall: '官方影廳' };
+  status.centuryasia.cinemas[recovered.cinema] = { state: 'ok', lastSuccessAt: stamp };
+  const selected = selectScheduleRows([recovered, ...official.slice(1), ...result.records], status, now);
+  assert.equal(selected.length, 5);
+  assert.deepEqual(selected.filter(r => r.cinema === recovered.cinema), [recovered]);
 });
 
 test('官方整支 403 且快取超過 72 小時，15 館備援皆能接手且不更新官方成功時間', async () => {
@@ -210,7 +246,7 @@ test('手動只刷新開眼不改排程，不和快取重建混用，也不跳�
   assert.doesNotMatch(step('健康檢查') + step('瀏覽器冒煙測試'), /if:|continue-on-error/);
 });
 
-test('實際建站把有備援的秀泰標示為開眼來源，無備援時仍誠實列為缺資料', async () => {
+test('實際建站把秀泰、喜樂時代與樂聲備援標示為開眼來源，無備援仍列缺資料', async () => {
   const scratch = await mkdtemp(join(tmpdir(), 'kaiyan-showtimes-build-'));
   try {
     await mkdir(join(scratch, 'data'));
@@ -222,7 +258,8 @@ test('實際建站把有備援的秀泰標示為開眼來源，無備援時仍�
     const current = todayISO(), currentStamp = new Date().toISOString();
     const oldStamp = new Date(Date.now() - 73 * 3600000).toISOString();
     const official = Object.values(SHOWTIMES_BACKUP).map(c => row('showtimes', c.name, current, oldStamp));
-    const backup = Object.values(SHOWTIMES_BACKUP).map(c => ({ ...row('atmovies', c.name, current, currentStamp), area: c.area }));
+    const backup = Object.values({ ...SHOWTIMES_BACKUP, ...CENTURY_LUX_BACKUP })
+      .map(c => ({ ...row('atmovies', c.name, current, currentStamp), area: c.area }));
     await writeFile(join(scratch, 'data', 'showtimes.json'), JSON.stringify(official));
     await writeFile(join(scratch, 'data', '_status.json'), JSON.stringify({
       showtimes: { fetchedAt: oldStamp }, atmovies: { fetchedAt: currentStamp },
@@ -233,14 +270,18 @@ test('實際建站把有備援的秀泰標示為開眼來源，無備援時仍�
       return JSON.parse(await readFile(join(scratch, 'out', 'site-status.json'), 'utf8'));
     };
     const restored = await build(backup);
-    assert.equal(restored.counts.sessions, 15);
-    assert.equal(restored.coverage.cinemas.length, 15);
+    assert.equal(restored.counts.sessions, 20);
+    assert.equal(restored.coverage.cinemas.length, 20);
     assert.ok(restored.coverage.cinemas.every(c => c.count === 1 && c.sources[0] === 'atmovies'));
-    assert.ok(restored.warnings.viaBackup.includes('秀泰'));
-    assert.ok(!restored.warnings.absent.includes('秀泰'));
+    for (const chain of ['秀泰', '喜樂時代', '樂聲']) {
+      assert.ok(restored.warnings.viaBackup.includes(chain));
+      assert.ok(!restored.warnings.absent.includes(chain));
+    }
     assert.ok(restored.warnings.staleSources.some(s => s.startsWith('showtimes(')));
     const missing = await build([row('atmovies', '其他影城', current, currentStamp)]);
-    assert.ok(missing.warnings.absent.includes('秀泰'));
-    assert.ok(!missing.warnings.viaBackup.includes('秀泰'));
+    for (const chain of ['秀泰', '喜樂時代', '樂聲']) {
+      assert.ok(missing.warnings.absent.includes(chain));
+      assert.ok(!missing.warnings.viaBackup.includes(chain));
+    }
   } finally { await rm(scratch, { recursive: true, force: true }); }
 });

@@ -6,11 +6,12 @@
 //   1. 硬性下限：每個來源至少要有這麼多筆，低於就是壞了（不是淡季）
 //   2. 相對衰退：跟上一輪成功的數字比，掉超過 55% 就可疑
 //   3. 新鮮度：超過 FRESH_HOURS 沒更新的來源，資料不再採用
-//   4. 全站門檻：總量低於 MIN_TOTAL 就不要發佈，寧可停留在舊版
+//   4. 全站門檻：多日總量不足時，另驗證完整名冊與新鮮當日場次，不能只放寬總量
 import { readFile, writeFile } from 'node:fs/promises';
 import { cinemaCoverage, selectScheduleRows } from './lib/cinema-coverage.mjs';
 import { normalizeMovieRecords } from './lib/movie-identity.mjs';
 import { todayISO } from './lib/common.mjs';
+import { publicationHealth } from './lib/publication-health.mjs';
 
 const root = new URL('.', import.meta.url).pathname;
 
@@ -55,7 +56,7 @@ const FLOOR = {
 };
 const DROP_RATIO = 0.45;   // 跌到上一輪的 45% 以下＝可疑
 const FRESH_HOURS = 72;    // 超過這個時數沒更新就不採用
-const MIN_TOTAL = 6000;    // 全站總場次低於此就別發佈
+const MIN_TOTAL = 6000;    // 正常多日門檻；不足時必須另外通過嚴格的當日覆蓋檢查
 
 let status = {};
 try {
@@ -149,7 +150,12 @@ for (const movie of uncertain) warnings.push(`${movie}: 作品版本尚待確認
 // 來源總量很大也不能掩蓋數十間影城消失；小量休館／未公布仍只警告。
 const coverageBlocked = coverage.length >= 10 && missingCinemas.length > Math.max(3, coverage.length * 0.2);
 if (coverageBlocked) problems.push(`${missingCinemas.length}/${coverage.length} 家影城沒有有效資料，停止發佈`);
-await writeFile(`${root}data/_health.json`, JSON.stringify({ checkedAt: new Date(now).toISOString(), problems, warnings, coverage }, null, 2));
+const publication = publicationHealth({ total, rows: allRows, status, coverage, history,
+  healthySources: Object.keys(healthy), today: todayISO(), now, minTotal: MIN_TOTAL });
+if (publication.basis === 'fresh-day-coverage') {
+  warnings.push(`多日總量 ${total} 低於 ${MIN_TOTAL}；完整 ${publication.roster} 館名冊中，${publication.freshTodayCinemas} 館有新鮮當日資料，共 ${publication.freshTodaySessions} 場，依當日覆蓋驗證發佈；未公布的未來日期不推測`);
+}
+await writeFile(`${root}data/_health.json`, JSON.stringify({ checkedAt: new Date(now).toISOString(), problems, warnings, coverage, publication }, null, 2));
 
 console.log('來源健康度：');
 for (const [k, v] of Object.entries(healthy)) console.log(`  ✓ ${k.padEnd(13)} ${v}`);
@@ -158,7 +164,7 @@ for (const p of problems) console.log(`  ✗ ${p}`);
 console.log(`\n可用來源 ${Object.keys(healthy).length}/${Object.keys(FLOOR).length}，總場次 ${total}`);
 
 // 更新歷史（只記健康的，免得把壞掉的低數字當成新基準）
-if (!coverageBlocked && total >= MIN_TOTAL && problems.length <= Object.keys(FLOOR).length / 2) {
+if (!coverageBlocked && publication.ok && problems.length <= Object.keys(FLOOR).length / 2) {
   const cinemaHistory = { ...history._cinemas };
   for (const c of coverage) if (c.state === 'ok' || c.state === 'today-only') cinemaHistory[c.name] = { count: c.count, dates: c.dates };
   await writeFile(`${root}data/_history.json`, JSON.stringify({ ...history, ...healthy, _cinemas: cinemaHistory }, null, 1));
@@ -166,8 +172,8 @@ if (!coverageBlocked && total >= MIN_TOTAL && problems.length <= Object.keys(FLO
 
 if (coverageBlocked) process.exit(1);
 
-if (total < MIN_TOTAL) {
-  console.error(`\n總場次 ${total} 低於門檻 ${MIN_TOTAL}，不發佈——保留線上既有版本比推一個殘缺的好。`);
+if (!publication.ok) {
+  console.error(`\n總場次 ${total} 低於門檻 ${MIN_TOTAL}，且當日覆蓋不足（${publication.freshTodaySessions}/${publication.minimumToday} 場、${publication.freshTodayCinemas}/${publication.minimumCinemas} 館、缺 ${publication.missing.length} 館），不發佈。`);
   process.exit(1);
 }
 if (problems.length > Object.keys(FLOOR).length / 2) {
