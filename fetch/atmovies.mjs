@@ -11,10 +11,10 @@
 //   - 光點華山電影館、府中15：已有 fetch/arthouse.mjs 直接抓官網（spot-hs.org.tw /
 //     fuzhong15.ntpc.gov.tw），資料更完整（多天、真廳別），這裡刻意不重複收，避免同一場次
 //     用不同 hall/tags 值在合併後被當成兩筆不同紀錄。
-//   - 國賓、美麗華、喜樂時代、in89、樂聲：這些連鎖已有其他 fetch/*.mjs 涵蓋
+//   - 國賓、美麗華、in89：這些連鎖已有其他 fetch/*.mjs 涵蓋
 //     官方資料，不用開眼補。
 //   - 威秀／MUVIE：我們從來沒有官方資料，這裡無條件抓（見下方 VIESHOW）。
-//   - 秀泰、新光、美麗新、王牌：官方與備援都抓取，建站逐館逐日選用（lib/cinema-coverage.mjs），
+//   - 秀泰、新光、美麗新、王牌、喜樂時代、樂聲：官方與備援都抓取，建站逐館逐日選用（lib/cinema-coverage.mjs），
 //     避免同一館兩份不同命名/來源的資料重複上架，也避免全來源總量掩蓋單館缺漏。
 //
 // 編碼：伺服器回應 Content-Type: text/html;charset=UTF-8，且動態內容（片名/場次）本身
@@ -148,7 +148,18 @@ export const SHOWTIMES_BACKUP = {
   t08902: { name: '台東秀泰影城', area: '台東縣', region: 'a89', official: SHOWTIMES_TICKETING },
 };
 
-export const CINEMAS = { ...ARTHOUSE, ...VIESHOW, ...SKCINEMAS_BACKUP, ...MIRANEW_BACKUP, ...ACECINEMA_BACKUP, ...SHOWTIMES_BACKUP };
+// 2026-10-28 由開眼台北／新北(a02)、高雄(a07)目錄核對館名、地址與官方連結。
+// 喜樂時代任一舊售票端點 503 會讓整支官方抓取器失敗；樂聲官方來源也可能不可用。
+// 沿用官方來源的館名，讓既有逐館逐日選擇器優先採用新鮮官方資料，不重複列館。
+export const CENTURY_LUX_BACKUP = {
+  t02a09: { name: '喜樂時代影城 南港店', area: '台北市', region: 'a02', official: 'https://www.centuryasia.com.tw/' },
+  t02e17: { name: '喜樂時代影城 永和店', area: '新北市', region: 'a02', official: 'https://beyond.centuryasia.com.tw/ticket_online.aspx' },
+  t02b06: { name: '喜樂時代影城 今日店', area: '台北市', region: 'a02', official: 'http://ximen.centuryasia.com.tw/ticket_online.aspx' },
+  t07730: { name: '喜樂時代影城 高雄店', area: '高雄市', region: 'a07', official: 'https://ksml.centuryasia.com.tw/ticket_online.aspx' },
+  t02b03: { name: '樂聲影城(西門町)', area: '台北市', region: 'a02', official: 'http://www.luxcinema.com.tw/web/showtime.php' },
+};
+
+export const CINEMAS = { ...ARTHOUSE, ...VIESHOW, ...SKCINEMAS_BACKUP, ...MIRANEW_BACKUP, ...ACECINEMA_BACKUP, ...SHOWTIMES_BACKUP, ...CENTURY_LUX_BACKUP };
 // 官方與備援都保留，建站逐館逐日選新鮮官方優先；不能因其他分館總筆數夠多就略過漏館。
 for (const c of Object.values(CINEMAS)) {
   const sk = SK_CINEMAS.find(x => x.name === c.name);
