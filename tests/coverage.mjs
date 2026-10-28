@@ -31,6 +31,39 @@ test('新備援取代失敗官方的舊快取，不能同一天重複上架', ()
   assert.equal(selectScheduleRows([old], status, now).length, 0, '來源時間戳很新也不能讓過期列復活');
 });
 
+test('覆蓋查詢連結跟隨實際採用的場次，不被過期官方狀態鎖住；官方恢復時可切回', () => {
+  const name = '台中新光影城';
+  const backup = { ...row('atmovies', name), url: 'https://example.com/current-booking' };
+  const oldStatus = { ...status, skcinemas: { ...status.skcinemas, cinemas: {
+    [name]: { ...status.skcinemas.cinemas[name], url: 'https://example.com/retired-booking' },
+  } } };
+  for (const entries of [Object.entries(oldStatus), Object.entries(oldStatus).reverse()]) {
+    assert.equal(cinemaCoverage([backup], Object.fromEntries(entries), day, now)[0].url, backup.url);
+  }
+  const official = { ...row('skcinemas', name), url: 'https://example.com/recovered-booking' };
+  const recovered = { ...oldStatus, skcinemas: { fetchedAt: stamp, cinemas: {
+    [name]: { state: 'ok', lastSuccessAt: stamp, url: oldStatus.skcinemas.cinemas[name].url },
+  } } };
+  assert.equal(cinemaCoverage([backup, official], recovered, day, now)[0].url, official.url);
+});
+
+test('最新成功場次提供查詢連結；已過日期、失敗日期及空網址不覆蓋，缺場次保留名冊連結', () => {
+  const name = '台中新光影城';
+  const oldStamp = new Date(now - 3600000).toISOString();
+  const s = { atmovies: { fetchedAt: stamp, cinemas: {
+    [name]: { state: 'partial', failedDates: ['2026-09-14'], url: 'https://example.com/roster' },
+  } } };
+  const older = { ...row('atmovies', name, day, oldStamp), url: 'https://example.com/older' };
+  const current = { ...row('atmovies', name), url: 'https://example.com/current' };
+  const past = { ...row('atmovies', name, '2026-09-12'), url: 'https://example.com/past' };
+  const failed = { ...row('atmovies', name, '2026-09-14'), url: 'https://example.com/failed' };
+  for (const rows of [[past, failed, older, current], [current, older, failed, past]]) {
+    assert.equal(cinemaCoverage(rows, s, day, now)[0].url, current.url);
+  }
+  assert.equal(cinemaCoverage([row('atmovies', name)], s, day, now)[0].url, s.atmovies.cinemas[name].url);
+  assert.equal(cinemaCoverage([], s, day, now)[0].url, s.atmovies.cinemas[name].url);
+});
+
 test('午夜之後的有效日期缺口可見，缺館仍列在覆蓋名冊', () => {
   const s = { atmovies: { fetchedAt: stamp, cinemas: {
     天母: { state: 'ok', area: '台北市', lastSuccessAt: stamp },
